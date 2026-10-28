@@ -1,0 +1,9 @@
+<?php
+require_once __DIR__.'/config/db.php';if(!$pdo){header('Location: payment.php?error=db');exit;}if($_SERVER['REQUEST_METHOD']!=='POST'){header('Location: payment.php');exit;}
+$name=trim($_POST['full_name']??'');$phone=trim($_POST['phone']??'');$course=(int)($_POST['course_id']??0);$provider=$_POST['provider']??'bank';if(!in_array($provider,['click','payme','bank'],true))$provider='bank';$last4=trim($_POST['payer_card_last4']??'');
+if($name===''||$phone===''||$course<1||($last4!==''&&!preg_match('/^[0-9]{4}$/',$last4))){header('Location: payment.php?error=invalid');exit;}
+$q=$pdo->prepare('SELECT price FROM courses WHERE id=? AND is_active=1');$q->execute([$course]);$row=$q->fetch();if(!$row){header('Location: payment.php?error=invalid');exit;}
+$f=$_FILES['receipt']??null;if(!$f||$f['error']!==UPLOAD_ERR_OK||$f['size']>5*1024*1024){header('Location: payment.php?error=receipt');exit;}
+$fi=new finfo(FILEINFO_MIME_TYPE);$mime=$fi->file($f['tmp_name']);$exts=['image/jpeg'=>'jpg','image/png'=>'png','application/pdf'=>'pdf'];if(!isset($exts[$mime])){header('Location: payment.php?error=receipt');exit;}
+$dir=__DIR__.'/uploads/receipts';if(!is_dir($dir)&&!mkdir($dir,0750,true)){header('Location: payment.php?error=receipt');exit;}$file='receipt_'.bin2hex(random_bytes(16)).'.'.$exts[$mime];if(!move_uploaded_file($f['tmp_name'],$dir.'/'.$file)){header('Location: payment.php?error=receipt');exit;}
+try{$q=$pdo->prepare('INSERT INTO online_payment_requests(full_name,phone,course_id,amount,provider,receipt_path,payer_card_last4,status) VALUES(?,?,?,?,?,?,?,\'pending\')');$q->execute([$name,$phone,$course,$row['price'],$provider,'uploads/receipts/'.$file,$last4?:null]);header('Location: payment.php?created=1');exit;}catch(Throwable $e){@unlink($dir.'/'.$file);header('Location: payment.php?error=db');exit;}
