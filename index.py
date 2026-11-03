@@ -12,7 +12,11 @@ async def db(method,path,data=None,prefer=None):
  headers={"apikey":KEY,"Authorization":"Bearer "+KEY,"Content-Type":"application/json"}
  if prefer:headers["Prefer"]=prefer
  async with httpx.AsyncClient(timeout=25) as c:r=await c.request(method,URL+"/rest/v1/"+path,headers=headers,json=data)
- if r.status_code>=400:\n  try:\n   err=r.json();detail=err.get("message") or err.get("details") or err.get("hint") or r.text[:300]\n  except Exception:detail=r.text[:300]\n  raise HTTPException(r.status_code,"Ma’lumotlar bazasi xatosi: "+str(detail))
+ if r.status_code>=400:
+  try:
+   err=r.json();detail=err.get("message") or err.get("details") or err.get("hint") or r.text[:300]
+  except Exception:detail=r.text[:300]
+  raise HTTPException(r.status_code,"Ma’lumotlar bazasi xatosi: "+str(detail))
  return r.json() if r.content else []
 def token(p):
  x=base64.urlsafe_b64encode(json.dumps(p).encode()).decode().rstrip("=")
