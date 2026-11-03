@@ -2,7 +2,9 @@ import os,time,json,hmac,hashlib,base64,uuid
 import bcrypt,httpx
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import HTMLResponse,JSONResponse
-app=FastAPI()
+app = FastAPI()
+application = app
+handler = app
 URL=(os.getenv("ALGORITM_SUPABASE_URL") or os.getenv("SUPABASE_URL") or "").rstrip("/")
 KEY=os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("ALGORITM_SUPABASE_KEY") or os.getenv("SUPABASE_SECRET_KEY") or ""
 SECRET=os.getenv("ADMIN_SESSION_SECRET") or KEY or "change-this-admin-secret"
