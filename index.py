@@ -95,7 +95,8 @@ async def create_row(table:str,r:Request):
 async def update_row(table:str,rid:str,r:Request):
  guard(r)
  if table not in TABLES:raise HTTPException(404,"Jadval topilmadi")
- if table=="site_settings":raise HTTPException(400,"Sayt sozlamalarini maxsus saqlash tugmasi orqali saqlang")\n return await db("PATCH",table+"?id=eq."+rid,await r.json(),"return=representation")
+ if table=="site_settings":raise HTTPException(400,"Sayt sozlamalarini maxsus saqlash tugmasi orqali saqlang")
+ return await db("PATCH",table+"?id=eq."+rid,await r.json(),"return=representation")
 @app.delete("/api/admin/{table}/{rid}")
 async def delete_row(table:str,rid:str,r:Request):
  guard(r)
