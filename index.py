@@ -195,6 +195,14 @@ HTML = HTML.replace("</body></html>", r"""<style>
  if(typeof loadTable==='function'){
   const previous=loadTable;
   loadTable=async function(t){
+   if(t==='online_payment_requests'){
+    currentTable=t;$('#adminTitle').textContent='To‘lov arizalari';
+    try{
+     const rows=await api('/api/admin/online_payment_requests');
+     $('#adminContent').innerHTML='<div class="panel table-wrap"><table class="table"><thead><tr><th>O‘quvchi</th><th>Telefon</th><th>Kurs</th><th>Summa</th><th>Chek</th><th>Holat</th><th>Amal</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+safe(r.full_name)+'</td><td>'+safe(r.phone)+'</td><td>'+safe(r.courses?.name||r.course_id)+'</td><td>'+Number(r.amount||0).toLocaleString('uz-UZ')+'</td><td><button class="btn outline receipt-view" data-path="'+safe(r.receipt_path)+'">Ko‘rish</button></td><td>'+safe(r.status)+'</td><td><button class="btn" onclick="reviewPayment('+r.id+',\'paid\')">Tasdiqlash</button> <button class="btn outline" onclick="reviewPayment('+r.id+',\'rejected\')">Rad etish</button></td></tr>').join('')+'</tbody></table></div>';
+     document.querySelectorAll('.receipt-view').forEach(btn=>btn.onclick=async()=>{try{const x=await api('/api/admin/payment-receipt-url',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:btn.dataset.path})});window.open(x.url,'_blank','noopener')}catch(e){toast(e.message)}});
+    }catch(e){toast(e.message)}return;
+   }
    if(t!=='site_settings')return previous(t);
    currentTable=t;$('#adminTitle').textContent='Sayt sozlamalari';
    try{
@@ -207,6 +215,7 @@ HTML = HTML.replace("</body></html>", r"""<style>
  }
  async function payment(){
   const page=$('#paymentPage');if(!page)return;
+  await drawCourses();
   try{
    const cfg=await api('/api/site-settings');
    const cards=[1,2,3].map(n=>({number:cfg['card_number_'+n],holder:cfg['card_holder_'+n]})).filter(x=>x.number);
@@ -225,4 +234,7 @@ HTML = HTML.replace("</body></html>", r"""<style>
  }
  if(location.pathname==='/payment')payment();
 })();
+window.reviewPayment=async function(id,status){
+ try{await api('/api/admin/online_payment_requests/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:status,reviewed_at:new Date().toISOString()})});toast('To‘lov holati yangilandi');if(typeof loadTable==='function')loadTable('online_payment_requests')}catch(e){toast(e.message)}
+};
 </script></body></html>""")
