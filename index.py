@@ -28,7 +28,7 @@ def guard(r):
 @app.get("/api/health")
 async def health():return {"ok":True,"database_configured":bool(URL and KEY)}
 @app.get("/api/courses")
-async def courses():return await db("GET","courses?select=id,name,price,description,teacher_name,image_path,is_active&is_active=eq.true&order=id")
+async def courses():return await db("GET","courses?select=id,name,price,description,teacher_name,teacher_bio,image_path,teacher_image,is_active&is_active=eq.true&order=id")
 @app.post("/api/register")
 async def register(r:Request):
  d=await r.json()
