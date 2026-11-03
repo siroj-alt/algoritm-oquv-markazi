@@ -101,6 +101,7 @@ async def create_payment_request(r:Request):
  try:
   raw=base64.b64decode(d["receipt_base64"],validate=True)
   course_id=int(d["course_id"]);amount=float(d["amount"])
+  if amount<=0:raise HTTPException(400,"To‘lov summasi noldan katta bo‘lishi kerak")
  except Exception:raise HTTPException(400,"To‘lov ma’lumotlari noto‘g‘ri")
  if not raw or len(raw)>5*1024*1024:raise HTTPException(400,"Chek 5 MB dan kichik bo‘lishi kerak")
  ext=str(d["receipt_name"]).lower().rsplit(".",1)[-1]
@@ -232,6 +233,22 @@ HTML = HTML.replace("</body></html>", r"""<style>
    };
   }catch(e){toast(e.message||'To‘lov ma’lumotlari yuklanmadi')}
  }
+ async function applySiteSettings(){
+  try{
+   const cfg=await api('/api/site-settings');
+   const title=document.querySelector('.hero h1');
+   const desc=document.querySelector('.hero-desc');
+   const about=document.querySelector('.about h2');
+   const aboutText=document.querySelector('.about p');
+   if(title&&cfg.hero_title)title.innerHTML=safe(cfg.hero_title).replace(/\\n/g,'<br>');
+   if(desc&&cfg.hero_text)desc.textContent=cfg.hero_text;
+   if(about&&cfg.about_title)about.textContent=cfg.about_title;
+   if(aboutText&&cfg.about_text)aboutText.textContent=cfg.about_text;
+   const footer=document.querySelector('.footer');
+   if(footer&&cfg.phone){const p=document.createElement('a');p.href='tel:'+cfg.phone.replace(/[^+0-9]/g,'');p.textContent=cfg.phone;footer.appendChild(p)}
+  }catch(e){}
+ }
+ applySiteSettings();
  if(location.pathname==='/payment')payment();
 })();
 window.reviewPayment=async function(id,status){
