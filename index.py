@@ -66,7 +66,7 @@ async def create_row(table:str,r:Request):
  guard(r)
  data=await r.json()
  if not isinstance(data,dict):raise HTTPException(400,"Yuborilgan ma’lumot formati noto‘g‘ri")
- if table=="site-settings":
+ if table in {"site-settings","site_settings"}:
   allowed={"hero_title","hero_text","about_title","about_text","phone","email","address","card_number_1","card_number_2","card_number_3","card_holder_1","card_holder_2","card_holder_3"}
   saved=[]
   for k,v in data.items():
