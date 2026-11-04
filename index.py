@@ -1,4 +1,4 @@
-import os,time,json,hmac,hashlib,base64,uuid
+import os,time,json,hmac,hashlib,base64,uuid,asyncio
 import bcrypt,httpx
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import HTMLResponse,JSONResponse
@@ -13,7 +13,16 @@ async def db(method,path,data=None,prefer=None):
  if not URL or not KEY: raise HTTPException(503,"Supabase sozlamalari topilmadi")
  headers={"apikey":KEY,"Authorization":"Bearer "+KEY,"Content-Type":"application/json"}
  if prefer:headers["Prefer"]=prefer
- async with httpx.AsyncClient(timeout=25) as c:r=await c.request(method,URL+"/rest/v1/"+path,headers=headers,json=data)
+ r=None
+ for attempt in range(3):
+  try:
+   async with httpx.AsyncClient(timeout=httpx.Timeout(20.0,connect=8.0)) as c:
+    r=await c.request(method,URL+"/rest/v1/"+path,headers=headers,json=data)
+   break
+  except (httpx.ConnectError,httpx.ConnectTimeout,httpx.ReadTimeout,httpx.PoolTimeout) as exc:
+   if attempt==2:raise HTTPException(503,"Ma’lumotlar bazasiga ulanish vaqtincha band. Bir necha soniyadan keyin qayta urinib ko‘ring.")
+   await asyncio.sleep(0.25*(attempt+1))
+ if r is None:raise HTTPException(503,"Ma’lumotlar bazasiga ulanib bo‘lmadi")
  if r.status_code>=400:
   try:
    err=r.json();detail=err.get("message") or err.get("details") or err.get("hint") or r.text[:300]
