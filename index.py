@@ -9,6 +9,7 @@ URL=(os.getenv("ALGORITM_SUPABASE_URL") or os.getenv("SUPABASE_URL") or "").rstr
 KEY=os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("ALGORITM_SUPABASE_KEY") or os.getenv("SUPABASE_SECRET_KEY") or ""
 SECRET=os.getenv("ADMIN_SESSION_SECRET") or KEY or "change-this-admin-secret"
 TABLES={"courses","students","groups","study_groups","enrollments","payments","online_payment_requests","attendance","online_tests","test_questions","test_results","site_settings"}
+DB_CLIENT=httpx.AsyncClient(timeout=httpx.Timeout(20.0,connect=8.0),limits=httpx.Limits(max_connections=8,max_keepalive_connections=4,keepalive_expiry=20.0))
 async def db(method,path,data=None,prefer=None):
  if not URL or not KEY: raise HTTPException(503,"Supabase sozlamalari topilmadi")
  headers={"apikey":KEY,"Authorization":"Bearer "+KEY,"Content-Type":"application/json"}
@@ -16,8 +17,7 @@ async def db(method,path,data=None,prefer=None):
  r=None
  for attempt in range(3):
   try:
-   async with httpx.AsyncClient(timeout=httpx.Timeout(20.0,connect=8.0)) as c:
-    r=await c.request(method,URL+"/rest/v1/"+path,headers=headers,json=data)
+   r=await DB_CLIENT.request(method,URL+"/rest/v1/"+path,headers=headers,json=data)
    break
   except (httpx.ConnectError,httpx.ConnectTimeout,httpx.ReadTimeout,httpx.PoolTimeout) as exc:
    if attempt==2:raise HTTPException(503,"Ma’lumotlar bazasiga ulanish vaqtincha band. Bir necha soniyadan keyin qayta urinib ko‘ring.")
