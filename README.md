@@ -12,7 +12,7 @@ va admin panel (`/admin`). Vercel (Python) + Supabase (PostgreSQL).
 | `algoritm/pages.py` | Ommaviy sahifalar (serverda tayyorlanadi — SEO va tezlik uchun) |
 | `algoritm/db.py` | Supabase RPC mijozi |
 | `web/` | CSS, JS, admin panel, logotip |
-| `supabase/schema.sql` | Baza sxemasi va barcha funksiyalar |
+| `supabase/migrations/` | Baza sxemasi va funksiyalar (Supabase GitHub integratsiyasi avtomatik qo‘llaydi) |
 | `algoritm_oquv_markazi/` | Eski PHP versiya (faqat arxiv, saytda ishlatilmaydi) |
 
 ## Xavfsizlik modeli
@@ -27,7 +27,7 @@ va admin panel (`/admin`). Vercel (Python) + Supabase (PostgreSQL).
 
 ## O‘rnatish
 
-1. Supabase loyihasida **SQL Editor** orqali `supabase/schema.sql` faylini ishga tushiring
+1. Supabase loyihasida **SQL Editor** orqali `supabase/migrations/` dagi fayllarni tartib bilan ishga tushiring
    (qayta ishga tushirish xavfsiz).
 2. Birinchi adminni yarating (parolni o‘zingiz tanlang):
 
@@ -37,7 +37,7 @@ va admin panel (`/admin`). Vercel (Python) + Supabase (PostgreSQL).
    ```
 
    Eski bazadagi ma’lumotlarni (eski `public` jadvallardan) ko‘chirish kerak bo‘lsa,
-   `schema.sql` dan keyin `supabase/migrate_from_old.sql` ni ishga tushiring — eski
+   sxemadan keyin `supabase/migrate_from_old.sql` ni ishga tushiring — eski
    jadvallar o‘zgartirilmaydi, eski admin parollari ishlashda davom etadi.
 3. Vercel loyihasida muhit o‘zgaruvchilari:
    * `ALGORITM_SUPABASE_URL` — `https://<loyiha>.supabase.co`

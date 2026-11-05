@@ -1,0 +1,3 @@
+# Supabase GitHub integratsiyasi uchun. `main` ga birlashtirilganda
+# supabase/migrations/ dagi yangi migratsiyalar avtomatik qo‘llanadi.
+project_id = "algoritm-oquv-markazi"

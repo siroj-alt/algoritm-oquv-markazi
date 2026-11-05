@@ -31,7 +31,9 @@ FALLBACK_KEYS = {"center_name", "hero_title", "hero_text", "about_title", "about
 THEME_SCRIPT = (
     "(function(){try{var t=localStorage.getItem('alg-theme');"
     "if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}"
-    "document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme='light'}})();"
+    "document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme='light'}"
+    "var d=document.documentElement;d.classList.add('js');"
+    "setTimeout(function(){if(!window.__alg)d.classList.remove('js')},2500)})();"
 )
 THEME_SCRIPT_HASH = "sha256-" + base64.b64encode(hashlib.sha256(THEME_SCRIPT.encode()).digest()).decode()
 
@@ -111,12 +113,33 @@ def icon(name: str, cls: str = "ico") -> str:
             f'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{_ICONS[name]}</svg>')
 
 
+_A_SHAPES = ('<polygon points="190,52 252,52 386,352 324,352"/>'
+             '<polygon points="156,184 218,184 146,352 84,352"/>')
+
+
 def a_mark(cls: str = "mark") -> str:
-    return (f'<svg class="{cls}" viewBox="0 0 420 420" aria-hidden="true">'
-            '<circle class="mark-ring" cx="210" cy="210" r="196" pathLength="100"/>'
-            '<polygon class="mark-r" points="190,52 252,52 386,352 324,352"/>'
-            '<polygon class="mark-l" points="156,184 218,184 146,352 84,352"/>'
-            '</svg>')
+    """Logotipdagi «A» belgisi (tekis SVG)."""
+    return f'<svg class="{cls}" viewBox="0 0 420 420" aria-hidden="true">{_A_SHAPES}</svg>'
+
+
+def hero_scene(tags: list[str]) -> str:
+    """Bosh sahifadagi 3D sahna: qatlamli (ekstruziya qilingan) «A», orbitalar va kurs teglari."""
+    depth = 14
+    layers = "".join(
+        f'<svg class="a-layer{" a-front" if i == 0 else ""}" style="--i:{i}" viewBox="0 0 420 420" aria-hidden="true">{_A_SHAPES}</svg>'
+        for i in range(depth - 1, -1, -1))
+    tag_html = "".join(f'<span class="mark-tag t{i + 1}">{e(t)}</span>' for i, t in enumerate(tags[:4]))
+    return f"""<div class="scene" data-scene aria-hidden="true">
+  <div class="scene-rig">
+    <div class="scene-float">
+      <div class="scene-floor"></div>
+      <div class="orbit orbit-a"><span class="ring"></span><span class="orb"></span></div>
+      <div class="orbit orbit-b"><span class="ring"></span><span class="orb orb-sm"></span></div>
+      <div class="a3d">{layers}</div>
+      {tag_html}
+    </div>
+  </div>
+</div>"""
 
 
 # ---------------------------------------------------------------- layout
@@ -240,7 +263,7 @@ def course_card(c: dict) -> str:
     first = desc.split("\n")[0][:170]
     price = float(c.get("price") or 0)
     price_html = f'<b>{money(price)}</b> so‘m' if price > 0 else 'Narxini menejerdan bilib oling'
-    return f"""<article class="course-card">
+    return f"""<article class="course-card" data-tilt>
   <a class="course-link" href="/courses/{e(c.get('id'))}">
     {course_media(c)}
     <div class="course-body">
@@ -306,7 +329,7 @@ def home(data: dict, **kw) -> str:
         facts.append(f'<li><b>{e(s["stat_teachers"])}</b><span>ustoz</span></li>')
     if s.get("stat_success"):
         facts.append(f'<li><b>{e(s["stat_success"])}</b><span>bitiruvchilar natijasi</span></li>')
-    tags = "".join(f'<span class="mark-tag t{i + 1}">{e(c.get("name"))}</span>' for i, c in enumerate(courses[:4]))
+    tags = [c.get("name") or "" for c in courses[:4]]
     course_cards = "".join(course_card(c) for c in courses[:6])
     if not course_cards:
         course_cards = '<p class="empty">Kurslar tez orada e’lon qilinadi. Hozircha telefon orqali ma’lumot oling.</p>'
@@ -322,7 +345,7 @@ def home(data: dict, **kw) -> str:
       <h2>Bilimingizni tekshirib ko‘ring</h2>
       <p class="muted">Onlayn testni ishlang va natijani darhol bilib oling. Ro‘yxatdan o‘tish shart emas.</p>
     </div>
-    <div class="test-rows">{rows}</div>
+    <div class="test-rows" data-reveal-group>{rows}</div>
   </div>
 </section>"""
     body = f"""<section class="hero">
@@ -336,21 +359,21 @@ def home(data: dict, **kw) -> str:
       </div>
       {f'<ul class="facts">{"".join(facts)}</ul>' if facts else ''}
     </div>
-    <div class="hero-art">{a_mark()}{tags}</div>
+    <div class="hero-art">{hero_scene(tags)}</div>
   </div>
 </section>
 
 <section class="section" id="courses">
   <div class="wrap">
     <div class="section-head"><h2>Kurslar</h2>{more}</div>
-    <div class="course-grid">{course_cards}</div>
+    <div class="course-grid" data-reveal-group>{course_cards}</div>
   </div>
 </section>
 
 <section class="section steps-section">
   <div class="wrap">
     <h2>O‘qishni qanday boshlaysiz</h2>
-    <ol class="steps">
+    <ol class="steps" data-reveal-group>
       <li><b>Ariza qoldiring</b><p>Saytdagi formani to‘ldiring yoki bizga qo‘ng‘iroq qiling.</p></li>
       <li><b>Menejer bilan gaplashing</b><p>Darajangiz va qulay vaqtingizga qarab guruh tanlaymiz.</p></li>
       <li><b>Darslarni boshlang</b><p>Guruhga qo‘shiling, to‘lovni kartaga o‘tkazib chekni saytga yuklang.</p></li>
@@ -382,7 +405,7 @@ def courses_page(data: dict, **kw) -> str:
   <p class="lead">O‘zingizga mos yo‘nalishni tanlang. Har bir kurs sahifasida dastur, ustoz va narx haqida ma’lumot bor.</p>
   {'<label class="search-field">' + icon("list") + '<input type="search" data-filter=".course-card" placeholder="Kurs yoki ustoz nomi bo‘yicha qidirish" aria-label="Kurslarni qidirish"></label>' if len(courses) > 4 else ''}
 </div></section>
-<section class="section section-tight"><div class="wrap"><div class="course-grid">{cards}</div>
+<section class="section section-tight"><div class="wrap"><div class="course-grid" data-reveal-group>{cards}</div>
 <p class="empty filter-empty" hidden>Bu so‘rov bo‘yicha kurs topilmadi.</p></div></section>"""
     return layout(title="Kurslar", description="Algoritm o‘quv markazidagi barcha kurslar: narxlar, ustozlar va dars jadvali.",
                   body=body, settings=s, active="courses", path="/courses", **kw)
@@ -453,9 +476,12 @@ def payment_page(data: dict, **kw) -> str:
             continue
         holder = s.get(f"card_holder_{n}") or ""
         digits = re.sub(r"\D", "", number)
-        cards.append(f"""<div class="pay-card">
-  <div><span class="pay-number">{e(number)}</span><small>{e(holder)}</small></div>
-  <button class="btn btn-ghost btn-sm" type="button" data-copy="{e(digits)}">{icon("copy")}Nusxalash</button>
+        brand = "Humo" if digits.startswith("9860") else "Uzcard" if digits.startswith("8600") or digits.startswith("5614") else "Karta"
+        cards.append(f"""<div class="pay-card" data-tilt>
+  <div class="pay-card-top"><span class="pay-chip" aria-hidden="true"></span><span class="pay-brand">{brand}</span></div>
+  <span class="pay-number">{e(number)}</span>
+  <div class="pay-card-bottom"><small>{e(holder)}</small>
+  <button class="btn btn-sm pay-copy" type="button" data-copy="{e(digits)}">{icon("copy")}Nusxalash</button></div>
 </div>""")
     cards_html = "".join(cards) or '<p class="muted">Karta raqami hali kiritilmagan. To‘lov rekvizitlarini menejerdan so‘rang.</p>'
     month = dt.date.today().strftime("%Y-%m")
@@ -510,7 +536,7 @@ def tests_page(data: dict, **kw) -> str:
   <h1>Onlayn testlar</h1>
   <p class="lead">Testni tanlang, savollarga javob bering va natijangizni shu zahoti ko‘ring.</p>
 </div></section>
-<section class="section section-tight"><div class="wrap"><div class="test-grid">{rows}</div></div></section>"""
+<section class="section section-tight"><div class="wrap"><div class="test-grid" data-reveal-group>{rows}</div></div></section>"""
     return layout(title="Onlayn testlar", description="Algoritm o‘quv markazining bepul onlayn testlari.",
                   body=body, settings=s, active="tests", path="/tests", **kw)
 

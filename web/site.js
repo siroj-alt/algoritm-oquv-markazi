@@ -1,6 +1,7 @@
 /* Algoritm o‘quv markazi — sayt skripti */
 (function () {
   "use strict";
+  window.__alg = true;
   var root = document.documentElement;
 
   /* ---------- toast */
@@ -231,6 +232,99 @@
     });
   });
 
+
+  /* ---------- 3D: sahna, egilish, paydo bo‘lish */
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var finePointer = window.matchMedia && matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+  var scene = document.querySelector("[data-scene]");
+  if (scene && !reduce) {
+    var rig = scene.querySelector(".scene-rig");
+    var area = scene.closest(".hero") || scene;
+    if (finePointer) {
+      area.addEventListener("pointermove", function (e) {
+        var r = scene.getBoundingClientRect();
+        var x = Math.max(-1, Math.min(1, (e.clientX - (r.left + r.width / 2)) / (r.width * 0.9)));
+        var y = Math.max(-1, Math.min(1, (e.clientY - (r.top + r.height / 2)) / (r.height * 0.9)));
+        rig.style.setProperty("--ry", (x * 22).toFixed(2) + "deg");
+        rig.style.setProperty("--rx", (-y * 14).toFixed(2) + "deg");
+      });
+      area.addEventListener("pointerleave", function () {
+        rig.style.setProperty("--ry", "0deg");
+        rig.style.setProperty("--rx", "0deg");
+      });
+    } else {
+      // Sensorli ekranlarda sahifa aylantirilganda sahna sekin buriladi
+      var ticking = false;
+      window.addEventListener("scroll", function () {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(function () {
+          var p = Math.min(1, window.scrollY / 600);
+          rig.style.setProperty("--ry", (p * 40).toFixed(2) + "deg");
+          rig.style.setProperty("--rx", (-p * 10).toFixed(2) + "deg");
+          ticking = false;
+        });
+      }, { passive: true });
+    }
+  }
+
+  if (finePointer && !reduce) {
+    document.querySelectorAll("[data-tilt]").forEach(function (el) {
+      var max = el.classList.contains("pay-card") ? 10 : 7;
+      el.addEventListener("pointermove", function (e) {
+        var r = el.getBoundingClientRect();
+        var x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+        el.classList.add("is-tilting");
+        el.style.setProperty("--ty", ((x - 0.5) * 2 * max).toFixed(2) + "deg");
+        el.style.setProperty("--tx", ((0.5 - y) * 2 * max).toFixed(2) + "deg");
+        el.style.setProperty("--gx", (x * 100).toFixed(1) + "%");
+        el.style.setProperty("--gy", (y * 100).toFixed(1) + "%");
+      });
+      el.addEventListener("pointerleave", function () {
+        el.classList.remove("is-tilting");
+        el.style.setProperty("--tx", "0deg");
+        el.style.setProperty("--ty", "0deg");
+      });
+    });
+  }
+
+  var groups = document.querySelectorAll("[data-reveal-group]");
+  function settle(el, delay) {
+    el.classList.add("is-in");
+    setTimeout(function () { el.classList.remove("is-in"); el.classList.add("is-done"); }, 1000 + delay);
+  }
+  if (groups.length) {
+    if (reduce || !("IntersectionObserver" in window)) {
+      groups.forEach(function (g) { Array.prototype.forEach.call(g.children, function (c) { c.classList.add("is-done"); }); });
+    } else {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (!en.isIntersecting) return;
+          io.unobserve(en.target);
+          var d = Number(en.target.style.getPropertyValue("--d")) || 0;
+          settle(en.target, d * 90);
+        });
+      }, { rootMargin: "0px 0px -8% 0px", threshold: 0.12 });
+      groups.forEach(function (g) {
+        Array.prototype.forEach.call(g.children, function (c, i) {
+          c.style.setProperty("--d", String(i % 6));
+          io.observe(c);
+        });
+      });
+    }
+  }
+
+  function countUp(el, target) {
+    if (reduce) { el.textContent = target + "%"; return; }
+    var start = performance.now(), dur = 1100;
+    (function step(now) {
+      var t = Math.min(1, (now - start) / dur), eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = Math.round(target * eased) + "%";
+      if (t < 1) requestAnimationFrame(step);
+    })(start);
+  }
+
   /* ---------- tests */
   document.querySelectorAll(".js-test").forEach(function (form) {
     var questions = form.querySelectorAll(".question");
@@ -270,7 +364,7 @@
         var verdict = pct >= 85 ? "Ajoyib natija!" : pct >= 60 ? "Yaxshi natija." : "Mashq qilishda davom eting.";
         box.innerHTML = '<h2></h2><div class="result-score"></div><p class="muted"></p><div class="actions actions-center"><a class="btn btn-primary" href="/register">Kursga yozilish</a><a class="btn btn-ghost" href="/tests">Boshqa testlar</a></div>';
         box.querySelector("h2").textContent = verdict;
-        box.querySelector(".result-score").textContent = pct + "%";
+        countUp(box.querySelector(".result-score"), pct);
         box.querySelector("p").textContent = r.total + " ta savoldan " + r.correct + " tasiga to‘g‘ri javob berdingiz.";
         form.hidden = true; box.hidden = false;
         box.scrollIntoView({ behavior: "smooth", block: "start" });
