@@ -36,6 +36,9 @@ va admin panel (`/admin`). Vercel (Python) + Supabase (PostgreSQL).
    values ('admin', extensions.crypt('KUCHLI-PAROL', extensions.gen_salt('bf', 10)), 'Bosh admin');
    ```
 
+   Eski bazadagi ma’lumotlarni (eski `public` jadvallardan) ko‘chirish kerak bo‘lsa,
+   `schema.sql` dan keyin `supabase/migrate_from_old.sql` ni ishga tushiring — eski
+   jadvallar o‘zgartirilmaydi, eski admin parollari ishlashda davom etadi.
 3. Vercel loyihasida muhit o‘zgaruvchilari:
    * `ALGORITM_SUPABASE_URL` — `https://<loyiha>.supabase.co`
    * `ALGORITM_SUPABASE_KEY` — Supabase publishable (`sb_publishable_…`) yoki anon kalit
