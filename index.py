@@ -204,6 +204,25 @@ async def submit_test(test_id:int,r:Request):
  return {"ok":True,"total_questions":total,"correct_answers":correct,"percentage":pct}
 
 
+
+@app.get("/api/diag-dns")
+async def diag_dns():
+ import socket,urllib.parse
+ hosts=[urllib.parse.urlparse(URL).hostname,"xmdxmfvrzbfjursksfhv.supabase.co","supabase.co","google.com","api.github.com"]
+ out={}
+ for h in hosts:
+  try:out[(h or "")[:10]]=len(socket.getaddrinfo(h,443))
+  except Exception as e:out[(h or "")[:10]]=repr(e)
+ try:
+  async with httpx.AsyncClient(timeout=10) as c:r=await c.get("https://xmdxmfvrzbfjursksfhv.supabase.co/rest/v1/")
+  out["edu_status"]=r.status_code
+ except Exception as e:out["edu_err"]=repr(e)
+ try:
+  async with httpx.AsyncClient(timeout=10) as c:r=await c.get("https://dns.google/resolve",params={"name":urllib.parse.urlparse(URL).hostname,"type":"A"})
+  j=r.json();out["doh_status"]=j.get("Status");out["doh_answers"]=len(j.get("Answer",[]) or [])
+ except Exception as e:out["doh_err"]=repr(e)
+ return out
+
 @app.get("/api/diag-db")
 async def diag_db():
  import socket,urllib.parse
