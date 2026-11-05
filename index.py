@@ -203,6 +203,46 @@ async def submit_test(test_id:int,r:Request):
  await db("POST","test_results",{"test_id":test_id,"full_name":full_name,"phone":phone,"total_questions":total,"correct_answers":correct,"percentage":pct,"answers_json":cleaned},"return=minimal")
  return {"ok":True,"total_questions":total,"correct_answers":correct,"percentage":pct}
 
+
+@app.get("/api/diag-db")
+async def diag_db():
+ import socket,urllib.parse
+ out={}
+ host=urllib.parse.urlparse(URL).hostname or ""
+ out["url_scheme"]=urllib.parse.urlparse(URL).scheme
+ out["url_has_space"]=URL!=URL.strip()
+ out["url_len"]=len(URL)
+ out["host_ref"]=host.split(".")[0][:6]+"…" if host else ""
+ out["host_suffix"]=".".join(host.split(".")[1:])
+ out["url_path"]=urllib.parse.urlparse(URL).path
+ sup=(os.getenv("SUPABASE_URL") or "").rstrip("/")
+ out["same_as_integration_url"]=(urllib.parse.urlparse(sup).hostname==host)
+ out["key_source"]=next((k for k in ("SUPABASE_SERVICE_ROLE_KEY","ALGORITM_SUPABASE_KEY","SUPABASE_SECRET_KEY") if os.getenv(k)),None)
+ out["has_algoritm_key"]=bool(os.getenv("ALGORITM_SUPABASE_KEY"))
+ out["algoritm_key_prefix"]=(os.getenv("ALGORITM_SUPABASE_KEY") or "")[:12]
+ try:
+  ai=socket.getaddrinfo(host,443)
+  out["dns"]=sorted({str(a[0]) for a in ai}); out["dns_count"]=len(ai)
+ except Exception as e: out["dns_error"]=repr(e)
+ for name,u in (("algoritm",URL),("integration",sup)):
+  try:
+   async with httpx.AsyncClient(timeout=10) as c:
+    r=await c.get(u+"/rest/v1/",headers={"apikey":KEY})
+   out[name+"_status"]=r.status_code; out[name+"_body"]=r.text[:160]
+  except Exception as e: out[name+"_error"]=type(e).__name__+": "+str(e)[:200]
+ for name,k in (("algoritm_key",os.getenv("ALGORITM_SUPABASE_KEY") or ""),("service_key",os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "")):
+  if not k: continue
+  try:
+   async with httpx.AsyncClient(timeout=10) as c:
+    r=await c.get(URL+"/rest/v1/courses?select=id&limit=1",headers={"apikey":k,"Authorization":"Bearer "+k})
+   out[name+"_courses_status"]=r.status_code; out[name+"_courses_body"]=r.text[:160]
+  except Exception as e: out[name+"_courses_error"]=type(e).__name__+": "+str(e)[:200]
+ try:
+  r=await DB_CLIENT.get(URL+"/rest/v1/",headers={"apikey":KEY})
+  out["shared_client_status"]=r.status_code
+ except Exception as e: out["shared_client_error"]=type(e).__name__+": "+str(e)[:200]
+ return out
+
 @app.get("/{path:path}",response_class=HTMLResponse)
 async def page(path:str=""):return HTML
 HTML = r"""<!doctype html><html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#08070b"><title>Algoritm — O‘quv markazi</title><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"><style>
