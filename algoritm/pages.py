@@ -341,7 +341,7 @@ def home(data: dict, **kw) -> str:
     if tests:
         rows = "".join(
             f'<a class="test-row" href="/tests/{e(t["id"])}"><span class="test-title">{e(t["title"])}</span>'
-            f'<span class="test-count">{e(t.get("questions"))} ta savol</span></a>' for t in tests[:4])
+            f'<span class="test-count">{test_label(t)}</span></a>' for t in tests[:4])
         tests_html = f"""<section class="section tests-band">
   <div class="wrap tests-grid">
     <div>
@@ -532,7 +532,7 @@ def tests_page(data: dict, **kw) -> str:
         rows = "".join(
             f'<a class="test-card" href="/tests/{e(t["id"])}"><h3>{e(t["title"])}</h3>'
             f'{"<p>" + e(t["description"]) + "</p>" if t.get("description") else ""}'
-            f'<span class="test-count">{e(t.get("questions"))} ta savol</span></a>' for t in tests)
+            f'<span class="test-count">{test_label(t)}</span></a>' for t in tests)
     else:
         rows = '<p class="empty">Hozircha faol testlar yo‘q. Tez orada yangi testlar qo‘shiladi.</p>'
     body = f"""<section class="page-head"><div class="wrap">
@@ -580,6 +580,13 @@ def test_page(data: dict, test: dict, **kw) -> str:
                   body=body, settings=s, active="tests", path=f"/tests/{test.get('id')}", **kw)
 
 
+def test_label(t: dict) -> str:
+    if t.get("file_only"):
+        return f"{file_kind(t.get('file_mime'))} fayl"
+    label = f"{e(t.get('questions'))} ta savol"
+    return label + (", fayl bilan" if t.get("file_mime") else "")
+
+
 def file_kind(mime: str) -> str:
     return {"application/pdf": "PDF", "text/plain": "Matn"}.get(mime or "", "Word")
 
@@ -596,24 +603,36 @@ def test_file_block(test: dict) -> str:
             f'<small>Test fayli testni yakunlaganingizdan keyin ochiladi</small></span></div>')
 
 
-def test_file_page(data: dict, tid, item: dict, paragraphs: list, query: str, **kw) -> str:
+def test_file_page(data: dict, tid, item: dict, paragraphs: list, query: str, test: dict | None = None, **kw) -> str:
+    """Test faylini o‘qish sahifasi. `test` berilsa — faqat fayldan iborat testning o‘z sahifasi."""
     s = data["settings"]
     name = item.get("name") or "Test fayli"
     is_pdf = item.get("mime") == "application/pdf"
     body_text = "".join(f"<p>{e(p)}</p>" for p in paragraphs[:3000]) or \
         '<p class="muted">Fayl matnini ko‘rsatib bo‘lmadi. Faylni yuklab olib oching.</p>'
-    pdf_btn = (f'<a class="btn btn-primary" href="/tests/{e(tid)}/file{query}raw=1" target="_blank" rel="noopener">'
+    base = f"/tests/{e(tid)}/file{query}"
+    pdf_btn = (f'<a class="btn btn-primary" href="{base}raw=1" target="_blank" rel="noopener">'
                f'{icon("file")}PDF ko‘rinishida ochish</a>') if is_pdf else ""
-    body = f"""<section class="page-head"><div class="wrap narrow">
-  <a class="back-link" href="/tests/{e(tid)}">{icon("back")}{e(item.get("title") or "Testga qaytish")}</a>
+    actions = f"""<div class="actions">{pdf_btn}
+    <a class="btn btn-ghost" href="{base}raw=1&amp;download=1">{icon("download")}Faylni yuklab olish</a>
+  </div>"""
+    if test:
+        head = f"""<a class="back-link" href="/tests">{icon("back")}Barcha testlar</a>
+  <h1>{e(test.get("title"))}</h1>
+  {f'<p class="lead">{e(test["description"])}</p>' if test.get("description") else ''}
+  <p class="file-meta">{icon("file")}<span>{e(name)}</span></p>
+  {actions}"""
+        title, desc, path = test.get("title") or name, (test.get("description") or name)[:160], f"/tests/{tid}"
+    else:
+        head = f"""<a class="back-link" href="/tests/{e(tid)}">{icon("back")}{e(item.get("title") or "Testga qaytish")}</a>
   <h1 class="file-title">{e(name)}</h1>
-  <div class="actions">{pdf_btn}
-    <a class="btn btn-ghost" href="/tests/{e(tid)}/file{query}raw=1&amp;download=1">{icon("download")}Faylni yuklab olish</a>
-  </div>
+  {actions}"""
+        title, desc, path = name, f"{name} — test fayli", f"/tests/{tid}/file"
+    body = f"""<section class="page-head"><div class="wrap narrow">
+  {head}
 </div></section>
 <section class="section section-tight"><div class="wrap narrow"><article class="doc-view">{body_text}</article></div></section>"""
-    return layout(title=name, description=f"{name} — test fayli", body=body, settings=s, active="tests",
-                  path=f"/tests/{tid}/file", **kw)
+    return layout(title=title, description=desc, body=body, settings=s, active="tests", path=path, **kw)
 
 
 def test_file_locked(data: dict, tid, message: str, **kw) -> str:

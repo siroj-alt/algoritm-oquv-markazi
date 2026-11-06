@@ -189,6 +189,10 @@ async def test_detail(request: Request):
             return html_page(pages.not_found(data, notice=notice), notice, 404)
         return html_page(pages.not_found(data, notice=exc.message), exc.message, 503)
     if not test.get("questions"):
+        f = test.get("file") or {}
+        if f.get("visibility") == "always":
+            # Faqat fayldan iborat test — hujjatning o‘zi ko‘rsatiladi
+            return await render_test_file(request, request.path_params["tid"], None, data, notice, test=test)
         return html_page(pages.not_found(data, notice=notice), notice, 404)
     resp = html_page(pages.test_page(data, test, notice=notice, base_url=base_url(request)), notice)
     return resp
@@ -554,6 +558,10 @@ async def test_file_page(request: Request):
     tid = request.path_params["tid"]
     token = request.query_params.get("t") or None
     data, notice = await site_data()
+    return await render_test_file(request, tid, token, data, notice)
+
+
+async def render_test_file(request: Request, tid, token, data, notice, test: dict | None = None):
     try:
         item = await db.rpc("get_test_file", {"p_test_id": tid, "p_token": token})
     except db.DBError as exc:
@@ -575,9 +583,10 @@ async def test_file_page(request: Request):
     except Exception:  # noqa: BLE001
         paragraphs = []
     query = f"?t={quote(token)}&" if token else "?"
-    resp = html_page(pages.test_file_page(data, tid, item, paragraphs, query, notice=notice), notice)
+    resp = html_page(pages.test_file_page(data, tid, item, paragraphs, query, test=test, notice=notice), notice)
     resp.headers["Cache-Control"] = "private, no-store" if token or notice else PUBLIC_CACHE
-    resp.headers["X-Robots-Tag"] = "noindex"
+    if not test:
+        resp.headers["X-Robots-Tag"] = "noindex"
     return resp
 
 

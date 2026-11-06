@@ -256,7 +256,11 @@
         { label: "Test", render: function (r) { return '<div class="cell-main">' + h(r.title) + '</div><div class="cell-sub">' + h(r.description || "") + (r.file_name ? "<br>Fayl: " + h(r.file_name) + " (" + h(FILE_VIS[r.file_visibility] || "") + ")" : "") + "</div>"; } },
         { label: "Savollar", cls: "num", render: function (r) { return h(r.questions_count); } },
         { label: "Ishlaganlar", cls: "num", render: function (r) { return h(r.results_count); } },
-        { label: "Saytda", render: function (r) { return r.is_active ? (Number(r.questions_count) ? badge("ok", { ok: "Ko‘rinadi" }) : badge("pending", { pending: "Savol qo‘shing" })) : badge("off", { off: "Yashirin" }); } }
+        { label: "Saytda", render: function (r) {
+            if (!r.is_active) return badge("off", { off: "Yashirin" });
+            if (Number(r.questions_count)) return badge("ok", { ok: "Test sifatida" });
+            if (r.file_id && r.file_visibility === "always") return badge("ok", { ok: "Fayl sifatida" });
+            return badge("pending", { pending: "Savol yoki fayl qo‘shing" }); } }
       ],
       actions: function (r) { return '<button class="btn btn-ghost btn-sm" data-act="questions" data-id="' + r.id + '">Savollar</button>'; },
       fields: [
@@ -715,8 +719,8 @@
     var test = tests.find(function (t) { return t.id === testId; });
     var body = setTitle(test ? "Savollar: " + test.title : "Savollar",
       '<button class="btn btn-ghost" type="button" data-back>' + icon("back") + 'Testlar</button>' +
-      '<button class="btn btn-ghost" type="button" data-import>' + icon("upload") + 'Fayldan yuklash</button>' +
-      '<button class="btn btn-primary" type="button" data-add>' + icon("plus") + "Savol qo‘shish</button>");
+      '<button class="btn btn-primary" type="button" data-import>' + icon("upload") + 'Fayl yuklash</button>' +
+      '<button class="btn btn-ghost" type="button" data-add>' + icon("plus") + "Savol qo‘shish</button>");
     document.querySelector("[data-back]").addEventListener("click", function () { location.hash = "#/tests"; });
     document.querySelector("[data-add]").addEventListener("click", function () { openForm("questions", null, { test_id: testId }); });
     var rows;
@@ -728,7 +732,10 @@
       (test && test.file_name
         ? "<b>" + h(test.file_name) + '</b><label class="file-vis">O‘quvchilarga: <select data-vis>' +
           Object.keys(FILE_VIS).map(function (k) { return '<option value="' + k + '"' + (test.file_visibility === k ? " selected" : "") + ">" + h(FILE_VIS[k]) + "</option>"; }).join("") +
-          "</select></label>"
+          "</select></label>" +
+          (!rows.length ? '<small class="file-hint-only">' + (test.file_visibility === "always"
+            ? "Savollar yo‘q — saytda bu test fayl sifatida ochiladi."
+            : "Savollar yo‘q — fayl saytda ko‘rinishi uchun «doim ochiq»ni tanlang.") + "</small>" : "")
         : "<b>Test fayli biriktirilmagan</b><small>Fayl biriktirsangiz, o‘quvchilar uni test sahifasida ko‘ra oladi.</small>") +
       '</div></div><div class="file-panel-actions">' +
       (test && test.file_name
@@ -741,7 +748,7 @@
         return '<li class="' + (q.correct_option === k.toUpperCase() ? "is-correct" : "") + '">' + h(q["option_" + k]) + "</li>";
       }).join("") + '</ol></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-edit="' + q.id + '">Tahrirlash</button> <button class="btn btn-danger btn-sm" data-del="' + q.id + '">O‘chirish</button></div></div>';
     }).join("") + "</div>"
-      : '<div class="panel"><div class="table-empty">Bu testda hali savol yo‘q. «Fayldan yuklash» orqali Word, PDF yoki matn fayldan savollarni qo‘shing yoki «Savol qo‘shish» tugmasini bosing.</div></div>';
+      : '<div class="panel"><div class="table-empty">Bu testda hali savol yo‘q. «Fayl yuklash» orqali Word, PDF yoki matn faylni testga aylantiring yoki faylning o‘zini o‘quvchilarga ko‘rsating. Savollarni qo‘lda ham qo‘shishingiz mumkin.</div></div>';
     body.innerHTML = filePanel + list;
 
     var vis = body.querySelector("[data-vis]");
@@ -775,6 +782,19 @@
     if (file.size > 3 * 1024 * 1024) throw new Error("Fayl hajmi 3 MB dan oshmasin");
     return { name: file.name, mime: file.type || "", data: await toBase64(file) };
   }
+  function docPicker() {
+    return '<div class="field"><span>Fayl (Word .docx, PDF yoki .txt, 3 MB gacha)</span><div class="doc-pick">' +
+      '<label class="btn btn-ghost btn-sm file-pick">' + icon("upload") + 'Fayl tanlash<input type="file" name="file" accept="' + DOC_ACCEPT + '"></label>' +
+      '<span class="doc-pick-name">Fayl tanlanmagan</span></div></div>';
+  }
+  document.addEventListener("change", function (e) {
+    var input = e.target;
+    if (!input.matches || !input.matches('.doc-pick input[type="file"]')) return;
+    var f = input.files && input.files[0];
+    var label = input.closest(".doc-pick").querySelector(".doc-pick-name");
+    label.textContent = f ? f.name + " (" + Math.ceil(f.size / 1024) + " KB)" : "Fayl tanlanmagan";
+    label.classList.toggle("is-set", !!f);
+  });
   function visSelect(selected) {
     return '<select name="visibility">' + Object.keys(FILE_VIS).map(function (k) {
       return '<option value="' + k + '"' + (k === selected ? " selected" : "") + ">" + h(FILE_VIS[k].charAt(0).toUpperCase() + FILE_VIS[k].slice(1)) + "</option>";
@@ -782,25 +802,55 @@
   }
 
   function openImport(test, existing) {
-    var m = modal("Fayldan savollarni yuklash", '<div class="modal-body imp">' +
-      '<label class="field"><span>Test fayli (Word .docx, PDF yoki .txt, 3 MB gacha)</span><input type="file" name="file" accept="' + DOC_ACCEPT + '"></label>' +
+    var m = modal("Fayl yuklash", '<div class="modal-body imp">' +
+      '<fieldset class="imp-modes"><legend>Fayl bilan nima qilinsin?</legend>' +
+      '<label class="imp-mode"><input type="radio" name="mode" value="convert" checked><span><b>Testga aylantirish</b><small>Fayldagi savollar onlayn testga aylanadi: o‘quvchilar saytda javob belgilaydi va natijasini darhol ko‘radi.</small></span></label>' +
+      '<label class="imp-mode"><input type="radio" name="mode" value="show"><span><b>Faylning o‘zini ko‘rsatish</b><small>Fayl o‘zgarishsiz saytga joylanadi: o‘quvchilar uni ochib o‘qiydi yoki yuklab oladi. Savollar qo‘shilmaydi.</small></span></label>' +
+      "</fieldset>" +
+      docPicker() +
+      '<div data-mode-convert>' +
       '<details class="imp-help"><summary>Fayl qanday yozilishi kerak?</summary><pre>1. Savol matni?\nA) birinchi variant\nB) ikkinchi variant\nC) uchinchi variant\nD) to‘rtinchi variant\nJavob: B</pre>' +
       '<p class="muted">Variantlar bir qatorda ham bo‘lishi mumkin: «A) 3  B) 4  C) 5  D) 6». To‘g‘ri javobni «Javob: B» qatori, variant oldidagi * yoki + belgisi, Word yoki PDF’da qalin (bold) yozuv, yoki fayl oxiridagi «Javoblar: 1-B, 2-A, …» kaliti bilan belgilang. Javob topilmagan savollar uchun keyingi qadamda o‘zingiz tanlaysiz.</p></details>' +
-      '<label class="check-field"><input type="checkbox" name="attach" checked> Faylni testga biriktirish (o‘quvchilar ko‘rishi uchun)</label>' +
+      '<label class="check-field"><input type="checkbox" name="attach"> Faylning o‘zini ham testga biriktirish (o‘quvchilar ko‘rishi uchun)</label>' +
+      "</div>" +
+      '<div data-mode-show hidden>' +
+      '<label class="field"><span>O‘quvchilarga</span><select name="show_vis"><option value="always">Doim ochiq</option><option value="hidden">Hozircha ko‘rinmasin</option></select></label>' +
+      (existing ? '<p class="muted">Bu testda ' + existing + ' ta savol bor — fayl test sahifasida savollar bilan birga ko‘rsatiladi.</p>' : '<p class="muted">Testda savol bo‘lmagani uchun saytda u fayl sifatida ochiladi.</p>') +
+      (test.file_name ? '<p class="muted">Hozirgi «' + h(test.file_name) + '» fayli yangisi bilan almashtiriladi.</p>' : "") +
+      "</div>" +
       '<p class="form-status" aria-live="polite"></p></div>' +
-      '<div class="modal-foot"><button class="btn btn-ghost" type="button" data-close>Bekor qilish</button><button class="btn btn-primary" type="button" data-read>Faylni o‘qish</button></div>', { wide: true });
+      '<div class="modal-foot"><button class="btn btn-ghost" type="button" data-close>Bekor qilish</button><button class="btn btn-primary" type="button" data-go>Faylni o‘qish</button></div>', { wide: true });
     var status = m.querySelector(".form-status");
-    m.querySelector("[data-read]").addEventListener("click", async function (e) {
-      var btn = e.target;
-      btn.disabled = true; btn.textContent = "O‘qilmoqda…";
+    var go = m.querySelector("[data-go]");
+    function mode() { return m.querySelector("[name=mode]:checked").value; }
+    function syncMode() {
+      var show = mode() === "show";
+      m.querySelector("[data-mode-convert]").hidden = show;
+      m.querySelector("[data-mode-show]").hidden = !show;
+      go.textContent = show ? "Faylni joylash" : "Faylni o‘qish";
+      status.textContent = ""; status.className = "form-status";
+    }
+    m.querySelectorAll("[name=mode]").forEach(function (r) { r.addEventListener("change", syncMode); });
+    go.addEventListener("click", async function () {
+      var label = go.textContent;
+      go.disabled = true; go.textContent = mode() === "show" ? "Joylanmoqda…" : "O‘qilmoqda…";
       status.textContent = ""; status.className = "form-status";
       try {
         var doc = await readDoc(m.querySelector("[name=file]").files[0]);
+        if (mode() === "show") {
+          var vis = m.querySelector("[name=show_vis]").value;
+          await api("POST", "/api/admin/tests/" + test.id + "/file", Object.assign({}, doc, { visibility: vis }));
+          closeModal();
+          toast(vis === "always" ? "Fayl saytga joylandi" : "Fayl saqlandi (hozircha yashirin)");
+          dropLookup("tests");
+          viewQuestions(test.id);
+          return;
+        }
         var res = await api("POST", "/api/admin/tests/" + test.id + "/parse", doc);
         showImportPreview(test, existing, doc, res, m.querySelector("[name=attach]").checked);
       } catch (err) {
         status.textContent = err.message; status.className = "form-status is-error";
-        btn.disabled = false; btn.textContent = "Faylni o‘qish";
+        go.disabled = false; go.textContent = label;
       }
     });
   }
@@ -877,7 +927,7 @@
 
   function openAttach(test) {
     var m = modal(test.file_name ? "Faylni almashtirish" : "Fayl biriktirish", '<div class="modal-body">' +
-      '<label class="field"><span>Fayl (Word .docx, PDF yoki .txt, 3 MB gacha)</span><input type="file" name="file" accept="' + DOC_ACCEPT + '"></label>' +
+      docPicker() +
       '<label class="field"><span>O‘quvchilarga</span>' + visSelect(test.file_visibility || "after") + "</label>" +
       '<p class="muted">Savollar o‘zgarmaydi. Fayldan savol qo‘shish uchun «Fayldan yuklash» tugmasidan foydalaning.</p>' +
       '<p class="form-status" aria-live="polite"></p></div>' +
