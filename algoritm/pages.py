@@ -104,6 +104,9 @@ _ICONS = {
     "calendar": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
     "back": '<path d="M15 5l-7 7 7 7"/>',
     "upload": '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
+    "file": '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+    "download": '<path d="M12 4v12M7 11l5 5 5-5"/><path d="M4 20h16"/>',
+    "lock": '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     "list": '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
 }
 
@@ -549,13 +552,14 @@ def test_page(data: dict, test: dict, **kw) -> str:
         opts = "".join(
             f'<label class="option"><input type="radio" name="q_{e(q["id"])}" value="{k.upper()}" required>'
             f'<span class="option-key">{k.upper()}</span><span>{e(q.get(k))}</span></label>'
-            for k in ("a", "b", "c", "d"))
+            for k in ("a", "b", "c", "d") if (q.get(k) or "").strip())
         q_html.append(f'<fieldset class="question"><legend><span class="q-num">{i}</span>{e(q.get("text"))}</legend>{opts}</fieldset>')
     body = f"""<section class="page-head"><div class="wrap narrow">
   <a class="back-link" href="/tests">{icon("back")}Barcha testlar</a>
   <h1>{e(test.get("title"))}</h1>
   {f'<p class="lead">{e(test["description"])}</p>' if test.get("description") else ''}
   <p class="muted">{len(qs)} ta savol. Barcha savollarga javob bering.</p>
+  {test_file_block(test)}
 </div></section>
 <section class="section section-tight"><div class="wrap narrow">
   <form class="js-test" data-test-id="{e(test.get('id'))}" novalidate>
@@ -574,6 +578,51 @@ def test_page(data: dict, test: dict, **kw) -> str:
 </div></section>"""
     return layout(title=test.get("title") or "Test", description=(test.get("description") or "Onlayn test")[:160],
                   body=body, settings=s, active="tests", path=f"/tests/{test.get('id')}", **kw)
+
+
+def file_kind(mime: str) -> str:
+    return {"application/pdf": "PDF", "text/plain": "Matn"}.get(mime or "", "Word")
+
+
+def test_file_block(test: dict) -> str:
+    f = test.get("file")
+    if not f:
+        return ""
+    name = e(f.get("name") or "Test fayli")
+    if f.get("visibility") == "always":
+        return (f'<a class="file-chip" href="/tests/{e(test.get("id"))}/file">{icon("file")}'
+                f'<span><b>{name}</b><small>{file_kind(f.get("mime"))} faylini ko‘rish</small></span></a>')
+    return (f'<div class="file-chip is-locked">{icon("lock")}<span><b>{name}</b>'
+            f'<small>Test fayli testni yakunlaganingizdan keyin ochiladi</small></span></div>')
+
+
+def test_file_page(data: dict, tid, item: dict, paragraphs: list, query: str, **kw) -> str:
+    s = data["settings"]
+    name = item.get("name") or "Test fayli"
+    is_pdf = item.get("mime") == "application/pdf"
+    body_text = "".join(f"<p>{e(p)}</p>" for p in paragraphs[:3000]) or \
+        '<p class="muted">Fayl matnini ko‘rsatib bo‘lmadi. Faylni yuklab olib oching.</p>'
+    pdf_btn = (f'<a class="btn btn-primary" href="/tests/{e(tid)}/file{query}raw=1" target="_blank" rel="noopener">'
+               f'{icon("file")}PDF ko‘rinishida ochish</a>') if is_pdf else ""
+    body = f"""<section class="page-head"><div class="wrap narrow">
+  <a class="back-link" href="/tests/{e(tid)}">{icon("back")}{e(item.get("title") or "Testga qaytish")}</a>
+  <h1 class="file-title">{e(name)}</h1>
+  <div class="actions">{pdf_btn}
+    <a class="btn btn-ghost" href="/tests/{e(tid)}/file{query}raw=1&amp;download=1">{icon("download")}Faylni yuklab olish</a>
+  </div>
+</div></section>
+<section class="section section-tight"><div class="wrap narrow"><article class="doc-view">{body_text}</article></div></section>"""
+    return layout(title=name, description=f"{name} — test fayli", body=body, settings=s, active="tests",
+                  path=f"/tests/{tid}/file", **kw)
+
+
+def test_file_locked(data: dict, tid, message: str, **kw) -> str:
+    body = f"""<section class="page-head page-404"><div class="wrap narrow">
+  <h1>Fayl hozircha yopiq</h1>
+  <p class="lead">{e(message)}. Testni ishlab bo‘lgach, natija sahifasida fayl havolasi paydo bo‘ladi.</p>
+  <div class="actions"><a class="btn btn-primary" href="/tests/{e(tid)}">Testni boshlash</a></div>
+</div></section>"""
+    return layout(title="Fayl yopiq", description="Test fayli", body=body, settings=data["settings"], active="tests", **kw)
 
 
 def not_found(data: dict, **kw) -> str:

@@ -45,4 +45,19 @@ va admin panel (`/admin`). Vercel (Python) + Supabase (PostgreSQL).
 4. Deploy qiling va `/admin` sahifasidan kiring. Kurslar, karta raqamlari va aloqa
    ma’lumotlarini admin paneldan kiriting.
 
+## Fayldan savol qo‘shish
+
+Admin panel → Onlayn testlar → «Savollar» → «Fayldan yuklash». Word (.docx), PDF yoki
+.txt fayldagi savollar avtomatik ajratiladi (`algoritm/test_import.py`):
+
+```
+1. Savol matni?
+A) variant   B) variant   C) variant   D) variant
+Javob: B
+```
+
+To‘g‘ri javob «Javob: B» qatori, variant oldidagi `*`/`+`, Word/PDF’dagi qalin yozuv yoki
+oxiridagi «Javoblar: 1-B, 2-A…» kaliti orqali aniqlanadi. Fayl testga biriktirilib,
+o‘quvchilarga «testdan keyin» yoki «doim» ko‘rsatilishi mumkin.
+
 `/api/health` — baza ulanishini tekshirish uchun.

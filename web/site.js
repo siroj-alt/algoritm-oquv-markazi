@@ -366,6 +366,14 @@
         box.querySelector("h2").textContent = verdict;
         countUp(box.querySelector(".result-score"), pct);
         box.querySelector("p").textContent = r.total + " ta savoldan " + r.correct + " tasiga to‘g‘ri javob berdingiz.";
+        var tid = form.getAttribute("data-test-id");
+        if (r.file_token || r.file_open) {
+          var a = document.createElement("a");
+          a.className = "btn btn-ghost";
+          a.href = "/tests/" + tid + "/file" + (r.file_token ? "?t=" + encodeURIComponent(r.file_token) : "");
+          a.textContent = "Test faylini ko‘rish";
+          box.querySelector(".actions").appendChild(a);
+        }
         form.hidden = true; box.hidden = false;
         box.scrollIntoView({ behavior: "smooth", block: "start" });
       } catch (err) {

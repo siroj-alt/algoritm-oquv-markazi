@@ -64,7 +64,9 @@
       sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
       moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
       back: '<path d="M15 5l-7 7 7 7"/>',
-      plus: '<path d="M12 5v14M5 12h14"/>'
+      plus: '<path d="M12 5v14M5 12h14"/>',
+      upload: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
+      file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>'
     };
     return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths[name] + "</svg>";
   }
@@ -105,6 +107,7 @@
   var REQUEST_STATUS = { pending: "Tekshirilmoqda", approved: "Tasdiqlangan", rejected: "Rad etilgan" };
   var METHODS = { cash: "Naqd", card: "Karta", transfer: "O‘tkazma", other: "Boshqa" };
   var ATTEND = { present: "Keldi", absent: "Kelmadi", late: "Kechikdi", excused: "Sababli" };
+  var FILE_VIS = { hidden: "o‘quvchilarga ko‘rinmaydi", after: "testdan keyin ochiladi", always: "doim ochiq" };
 
   /* ================================================= lookups */
   async function lookup(name) {
@@ -250,7 +253,7 @@
     tests: {
       title: "Onlayn testlar", add: "Yangi test", one: "test",
       columns: [
-        { label: "Test", render: function (r) { return '<div class="cell-main">' + h(r.title) + '</div><div class="cell-sub">' + h(r.description || "") + "</div>"; } },
+        { label: "Test", render: function (r) { return '<div class="cell-main">' + h(r.title) + '</div><div class="cell-sub">' + h(r.description || "") + (r.file_name ? "<br>Fayl: " + h(r.file_name) + " (" + h(FILE_VIS[r.file_visibility] || "") + ")" : "") + "</div>"; } },
         { label: "Savollar", cls: "num", render: function (r) { return h(r.questions_count); } },
         { label: "Ishlaganlar", cls: "num", render: function (r) { return h(r.results_count); } },
         { label: "Saytda", render: function (r) { return r.is_active ? (Number(r.questions_count) ? badge("ok", { ok: "Ko‘rinadi" }) : badge("pending", { pending: "Savol qo‘shing" })) : badge("off", { off: "Yashirin" }); } }
@@ -269,8 +272,8 @@
         { name: "question_text", label: "Savol", type: "textarea", required: true, span: 2 },
         { name: "option_a", label: "A javob", type: "text", required: true },
         { name: "option_b", label: "B javob", type: "text", required: true },
-        { name: "option_c", label: "C javob", type: "text", required: true },
-        { name: "option_d", label: "D javob", type: "text", required: true },
+        { name: "option_c", label: "C javob", type: "text" },
+        { name: "option_d", label: "D javob", type: "text" },
         { name: "correct_option", label: "To‘g‘ri javob", type: "select", required: true, options: function () { return ["A", "B", "C", "D"].map(function (x) { return { value: x, label: x }; }); } },
         { name: "sort_order", label: "Tartib raqami", type: "number", def: 0 }
       ]
@@ -629,6 +632,11 @@
         else if (f.type === "select" && /_id$/.test(f.name)) data[f.name] = val === "" ? null : Number(val);
         else data[f.name] = val === "" ? null : val;
       });
+      if (!bad && entity === "questions") {
+        if (!data.option_c && data.option_d) { status.textContent = "D variantdan oldin C variantni to‘ldiring"; status.className = "form-status is-error"; return; }
+        var key = { C: data.option_c, D: data.option_d }[data.correct_option];
+        if ((data.correct_option === "C" || data.correct_option === "D") && !key) { status.textContent = "To‘g‘ri javob sifatida bo‘sh variant tanlangan"; status.className = "form-status is-error"; return; }
+      }
       if (bad) {
         var fl = cfg.fields.find(function (f) { return f.name === bad.name; });
         status.textContent = "To‘ldiring: " + (fl ? fl.label : bad.name); status.className = "form-status is-error";
@@ -702,27 +710,201 @@
 
   /* ================================================= questions */
   async function viewQuestions(testId) {
+    dropLookup("tests");
     var tests = await lookup("tests");
     var test = tests.find(function (t) { return t.id === testId; });
     var body = setTitle(test ? "Savollar: " + test.title : "Savollar",
-      '<button class="btn btn-ghost" type="button" data-back>' + icon("back") + 'Testlar</button><button class="btn btn-primary" type="button" data-add>' + icon("plus") + "Savol qo‘shish</button>");
+      '<button class="btn btn-ghost" type="button" data-back>' + icon("back") + 'Testlar</button>' +
+      '<button class="btn btn-ghost" type="button" data-import>' + icon("upload") + 'Fayldan yuklash</button>' +
+      '<button class="btn btn-primary" type="button" data-add>' + icon("plus") + "Savol qo‘shish</button>");
     document.querySelector("[data-back]").addEventListener("click", function () { location.hash = "#/tests"; });
     document.querySelector("[data-add]").addEventListener("click", function () { openForm("questions", null, { test_id: testId }); });
     var rows;
     try { rows = await api("GET", "/api/admin/list/questions?test_id=" + testId); }
     catch (e) { body.innerHTML = '<div class="table-empty">' + h(e.message) + "</div>"; return; }
-    dropLookup("tests");
-    if (!rows.length) { body.innerHTML = '<div class="panel"><div class="table-empty">Bu testda hali savol yo‘q. Saytda ko‘rinishi uchun kamida bitta savol qo‘shing.</div></div>'; return; }
-    body.innerHTML = '<div class="panel">' + rows.map(function (q, i) {
-      return '<div class="q-item"><div><b>' + (i + 1) + ". " + h(q.question_text) + "</b><ol type=\"A\">" + ["a", "b", "c", "d"].map(function (k) {
+    document.querySelector("[data-import]").addEventListener("click", function () { openImport(test, rows.length); });
+
+    var filePanel = '<section class="panel file-panel"><div class="file-panel-main">' + icon("file") + "<div>" +
+      (test && test.file_name
+        ? "<b>" + h(test.file_name) + '</b><label class="file-vis">O‘quvchilarga: <select data-vis>' +
+          Object.keys(FILE_VIS).map(function (k) { return '<option value="' + k + '"' + (test.file_visibility === k ? " selected" : "") + ">" + h(FILE_VIS[k]) + "</option>"; }).join("") +
+          "</select></label>"
+        : "<b>Test fayli biriktirilmagan</b><small>Fayl biriktirsangiz, o‘quvchilar uni test sahifasida ko‘ra oladi.</small>") +
+      '</div></div><div class="file-panel-actions">' +
+      (test && test.file_name
+        ? '<button class="btn btn-ghost btn-sm" type="button" data-file-open>Ochish</button><button class="btn btn-ghost btn-sm" type="button" data-file-replace>Almashtirish</button><button class="btn btn-danger btn-sm" type="button" data-file-remove>O‘chirish</button>'
+        : '<button class="btn btn-ghost btn-sm" type="button" data-file-replace>Fayl biriktirish</button>') +
+      "</div></section>";
+
+    var list = rows.length ? '<div class="panel">' + rows.map(function (q, i) {
+      return '<div class="q-item"><div><b>' + (i + 1) + ". " + h(q.question_text) + '</b><ol type="A">' + ["a", "b", "c", "d"].filter(function (k) { return q["option_" + k]; }).map(function (k) {
         return '<li class="' + (q.correct_option === k.toUpperCase() ? "is-correct" : "") + '">' + h(q["option_" + k]) + "</li>";
       }).join("") + '</ol></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-edit="' + q.id + '">Tahrirlash</button> <button class="btn btn-danger btn-sm" data-del="' + q.id + '">O‘chirish</button></div></div>';
-    }).join("") + "</div>";
+    }).join("") + "</div>"
+      : '<div class="panel"><div class="table-empty">Bu testda hali savol yo‘q. «Fayldan yuklash» orqali Word, PDF yoki matn fayldan savollarni qo‘shing yoki «Savol qo‘shish» tugmasini bosing.</div></div>';
+    body.innerHTML = filePanel + list;
+
+    var vis = body.querySelector("[data-vis]");
+    if (vis) vis.addEventListener("change", async function () {
+      try { await api("POST", "/api/admin/save/tests", { id: testId, data: { file_visibility: vis.value } }); toast("Saqlandi: fayl " + FILE_VIS[vis.value]); dropLookup("tests"); }
+      catch (err) { toast(err.message, true); }
+    });
+    var openBtn = body.querySelector("[data-file-open]");
+    if (openBtn) openBtn.addEventListener("click", function () { showTestFile(test); });
+    body.querySelector("[data-file-replace]").addEventListener("click", function () { openAttach(test); });
+    var rm = body.querySelector("[data-file-remove]");
+    if (rm) rm.addEventListener("click", function () {
+      var m = modal("Faylni o‘chirish", '<div class="modal-body"><p>«' + h(test.file_name) + '» testdan olib tashlanadi. Savollar o‘chirilmaydi.</p></div><div class="modal-foot"><button class="btn btn-ghost" type="button" data-close>Bekor qilish</button><button class="btn btn-primary" type="button" data-yes>O‘chirish</button></div>');
+      m.querySelector("[data-yes]").addEventListener("click", async function () {
+        try { await api("POST", "/api/admin/tests/" + testId + "/file/remove", {}); closeModal(); toast("Fayl o‘chirildi"); viewQuestions(testId); }
+        catch (err) { closeModal(); toast(err.message, true); }
+      });
+    });
     body.addEventListener("click", function (e) {
       var ed = e.target.closest("[data-edit]"), del = e.target.closest("[data-del]");
       if (ed) { var q = rows.find(function (r) { return r.id === Number(ed.getAttribute("data-edit")); }); openForm("questions", q, { test_id: testId }); }
       if (del) { var q2 = rows.find(function (r) { return r.id === Number(del.getAttribute("data-del")); }); confirmDelete("questions", q2, function () { viewQuestions(testId); }); }
     });
+  }
+
+  var DOC_ACCEPT = ".docx,.pdf,.txt,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  async function readDoc(file) {
+    if (!file) throw new Error("Faylni tanlang");
+    if (/\.doc$/i.test(file.name)) throw new Error("Eski .doc formati o‘qilmaydi. Word'da «Saqlash → .docx» qilib qayta yuklang");
+    if (!/\.(docx|pdf|txt)$/i.test(file.name)) throw new Error("Faqat Word (.docx), PDF yoki .txt fayl yuklang");
+    if (file.size > 3 * 1024 * 1024) throw new Error("Fayl hajmi 3 MB dan oshmasin");
+    return { name: file.name, mime: file.type || "", data: await toBase64(file) };
+  }
+  function visSelect(selected) {
+    return '<select name="visibility">' + Object.keys(FILE_VIS).map(function (k) {
+      return '<option value="' + k + '"' + (k === selected ? " selected" : "") + ">" + h(FILE_VIS[k].charAt(0).toUpperCase() + FILE_VIS[k].slice(1)) + "</option>";
+    }).join("") + "</select>";
+  }
+
+  function openImport(test, existing) {
+    var m = modal("Fayldan savollarni yuklash", '<div class="modal-body imp">' +
+      '<label class="field"><span>Test fayli (Word .docx, PDF yoki .txt, 3 MB gacha)</span><input type="file" name="file" accept="' + DOC_ACCEPT + '"></label>' +
+      '<details class="imp-help"><summary>Fayl qanday yozilishi kerak?</summary><pre>1. Savol matni?\nA) birinchi variant\nB) ikkinchi variant\nC) uchinchi variant\nD) to‘rtinchi variant\nJavob: B</pre>' +
+      '<p class="muted">Variantlar bir qatorda ham bo‘lishi mumkin: «A) 3  B) 4  C) 5  D) 6». To‘g‘ri javobni «Javob: B» qatori, variant oldidagi * yoki + belgisi, Word yoki PDF’da qalin (bold) yozuv, yoki fayl oxiridagi «Javoblar: 1-B, 2-A, …» kaliti bilan belgilang. Javob topilmagan savollar uchun keyingi qadamda o‘zingiz tanlaysiz.</p></details>' +
+      '<label class="check-field"><input type="checkbox" name="attach" checked> Faylni testga biriktirish (o‘quvchilar ko‘rishi uchun)</label>' +
+      '<p class="form-status" aria-live="polite"></p></div>' +
+      '<div class="modal-foot"><button class="btn btn-ghost" type="button" data-close>Bekor qilish</button><button class="btn btn-primary" type="button" data-read>Faylni o‘qish</button></div>', { wide: true });
+    var status = m.querySelector(".form-status");
+    m.querySelector("[data-read]").addEventListener("click", async function (e) {
+      var btn = e.target;
+      btn.disabled = true; btn.textContent = "O‘qilmoqda…";
+      status.textContent = ""; status.className = "form-status";
+      try {
+        var doc = await readDoc(m.querySelector("[name=file]").files[0]);
+        var res = await api("POST", "/api/admin/tests/" + test.id + "/parse", doc);
+        showImportPreview(test, existing, doc, res, m.querySelector("[name=attach]").checked);
+      } catch (err) {
+        status.textContent = err.message; status.className = "form-status is-error";
+        btn.disabled = false; btn.textContent = "Faylni o‘qish";
+      }
+    });
+  }
+
+  function showImportPreview(test, existing, doc, res, attach) {
+    var qs = res.questions;
+    var defVis = res.with_answers > 0 ? "after" : "always";
+    var items = qs.map(function (q, i) {
+      var opts = ["A", "B", "C", "D"].filter(function (l) { return q["option_" + l.toLowerCase()]; });
+      return '<div class="imp-q' + (q.correct_option ? "" : " is-missing") + '" data-i="' + i + '">' +
+        '<label class="imp-q-head"><input type="checkbox" data-take checked><b>' + (i + 1) + ". " + h(q.question_text) + "</b></label>" +
+        '<div class="imp-opts">' + opts.map(function (l) {
+          return '<label class="imp-opt"><input type="radio" name="c' + i + '" value="' + l + '"' + (q.correct_option === l ? " checked" : "") + '><span class="option-key">' + l + "</span><span>" + h(q["option_" + l.toLowerCase()]) + "</span></label>";
+        }).join("") + "</div>" +
+        (q.correct_option ? '<small class="muted">To‘g‘ri javob: ' + q.correct_option + " (" + h(q.source || "") + ")</small>" : '<small class="imp-miss">To‘g‘ri javobni belgilang</small>') +
+        "</div>";
+    }).join("");
+    var m = modal("Topilgan savollar: " + qs.length + " ta", '<div class="modal-body imp">' +
+      '<p class="imp-summary"><b>' + qs.length + " ta savol</b> topildi, " + res.with_answers + " tasida to‘g‘ri javob aniqlandi." + (qs.length - res.with_answers ? " Qolganlari uchun javobni belgilang." : "") + "</p>" +
+      (res.warnings.length ? '<details class="imp-warn"' + (res.warnings.length < 6 ? " open" : "") + "><summary>" + res.warnings.length + " ta eslatma</summary><ul>" + res.warnings.map(function (w) { return "<li>" + h(w) + "</li>"; }).join("") + "</ul></details>" : "") +
+      '<div class="imp-list">' + items + "</div>" +
+      '<div class="imp-settings">' +
+      (existing ? '<label class="check-field"><input type="checkbox" name="replace"> Testdagi mavjud ' + existing + " ta savolni o‘chirib, yangilari bilan almashtirish</label>" : "") +
+      (attach ? '<label class="field"><span>«' + h(doc.name) + '» fayli o‘quvchilarga</span>' + visSelect(defVis) +
+        (res.with_answers > 0 ? '<small class="muted">Faylda to‘g‘ri javoblar bor, shuning uchun uni testdan keyin ochish tavsiya etiladi.</small>' : "") + "</label>" : "") +
+      '</div><p class="form-status" aria-live="polite"></p></div>' +
+      '<div class="modal-foot"><button class="btn btn-ghost" type="button" data-close>Bekor qilish</button><button class="btn btn-primary" type="button" data-save>Savollarni qo‘shish</button></div>', { wide: true });
+    var status = m.querySelector(".form-status");
+    var saveBtn = m.querySelector("[data-save]");
+    function refresh() {
+      var n = m.querySelectorAll(".imp-q [data-take]:checked").length;
+      saveBtn.textContent = n ? n + " ta savolni qo‘shish" : "Savol tanlanmagan";
+      saveBtn.disabled = !n;
+      m.querySelectorAll(".imp-q").forEach(function (card) {
+        var picked = card.querySelector("input[type=radio]:checked");
+        card.classList.toggle("is-missing", !picked && card.querySelector("[data-take]").checked);
+        card.classList.toggle("is-off", !card.querySelector("[data-take]").checked);
+        var miss = card.querySelector(".imp-miss, .imp-picked");
+        if (miss) {
+          miss.textContent = picked ? "Tanlandi: " + picked.value : "To‘g‘ri javobni belgilang";
+          miss.className = picked ? "imp-picked" : "imp-miss";
+        }
+      });
+    }
+    m.addEventListener("change", refresh);
+    refresh();
+    saveBtn.addEventListener("click", async function () {
+      var chosen = [], missing = null;
+      m.querySelectorAll(".imp-q").forEach(function (card) {
+        if (!card.querySelector("[data-take]").checked) return;
+        var i = Number(card.getAttribute("data-i"));
+        var picked = card.querySelector("input[type=radio]:checked");
+        if (!picked && !missing) missing = card;
+        var q = Object.assign({}, qs[i], { correct_option: picked ? picked.value : null });
+        chosen.push(q);
+      });
+      if (missing) { status.textContent = "Belgilanmagan savollar bor — to‘g‘ri javobni tanlang yoki savolni ro‘yxatdan olib tashlang"; status.className = "form-status is-error"; missing.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+      saveBtn.disabled = true; saveBtn.textContent = "Saqlanmoqda…";
+      try {
+        var r = await api("POST", "/api/admin/tests/" + test.id + "/import", { questions: chosen, replace: !!(m.querySelector("[name=replace]") || {}).checked });
+        if (attach) {
+          await api("POST", "/api/admin/tests/" + test.id + "/file", Object.assign({}, doc, { visibility: m.querySelector("[name=visibility]").value }));
+        }
+        closeModal();
+        toast(r.added + " ta savol qo‘shildi" + (attach ? ", fayl biriktirildi" : ""));
+        dropLookup("tests");
+        viewQuestions(test.id);
+      } catch (err) {
+        status.textContent = err.message; status.className = "form-status is-error";
+        saveBtn.disabled = false; refresh();
+      }
+    });
+  }
+
+  function openAttach(test) {
+    var m = modal(test.file_name ? "Faylni almashtirish" : "Fayl biriktirish", '<div class="modal-body">' +
+      '<label class="field"><span>Fayl (Word .docx, PDF yoki .txt, 3 MB gacha)</span><input type="file" name="file" accept="' + DOC_ACCEPT + '"></label>' +
+      '<label class="field"><span>O‘quvchilarga</span>' + visSelect(test.file_visibility || "after") + "</label>" +
+      '<p class="muted">Savollar o‘zgarmaydi. Fayldan savol qo‘shish uchun «Fayldan yuklash» tugmasidan foydalaning.</p>' +
+      '<p class="form-status" aria-live="polite"></p></div>' +
+      '<div class="modal-foot"><button class="btn btn-ghost" type="button" data-close>Bekor qilish</button><button class="btn btn-primary" type="button" data-save>Saqlash</button></div>');
+    m.querySelector("[data-save]").addEventListener("click", async function (e) {
+      var st = m.querySelector(".form-status");
+      e.target.disabled = true;
+      try {
+        var doc = await readDoc(m.querySelector("[name=file]").files[0]);
+        await api("POST", "/api/admin/tests/" + test.id + "/file", Object.assign(doc, { visibility: m.querySelector("[name=visibility]").value }));
+        closeModal(); toast("Fayl saqlandi"); dropLookup("tests"); viewQuestions(test.id);
+      } catch (err) { st.textContent = err.message; st.className = "form-status is-error"; e.target.disabled = false; }
+    });
+  }
+
+  async function showTestFile(test) {
+    try {
+      var res = await fetch("/api/admin/tests/" + test.id + "/file", { credentials: "same-origin" });
+      if (!res.ok) { var d = {}; try { d = await res.json(); } catch (e) {} throw new Error(d.detail || "Faylni ochib bo‘lmadi"); }
+      var blob = await res.blob();
+      var url = URL.createObjectURL(blob);
+      var isPdf = blob.type === "application/pdf";
+      var m = modal(test.file_name, '<div class="modal-body" data-blob="' + url + '">' +
+        (isPdf ? '<iframe class="receipt-frame" title="Test fayli" src="' + url + '"></iframe>' : '<p class="muted">Word va matn fayllarini brauzerda oldindan ko‘rib bo‘lmaydi — yuklab oling. O‘quvchilar uni saytda matn ko‘rinishida o‘qiydi.</p>') +
+        '<p style="margin-top:12px"><a class="btn btn-ghost btn-sm" href="' + url + '" download="' + h(test.file_name) + '">Yuklab olish</a> ' +
+        (test.file_visibility === "always" ? '<a class="btn btn-ghost btn-sm" href="/tests/' + test.id + '/file" target="_blank" rel="noopener">O‘quvchi ko‘rinishi</a>' : "") + "</p></div>", { wide: true });
+    } catch (err) { toast(err.message, true); }
   }
 
   /* ================================================= settings */

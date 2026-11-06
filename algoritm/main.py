@@ -9,7 +9,9 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from . import db, pages
+from urllib.parse import quote
+
+from . import db, pages, test_import
 from .assets import load as load_asset
 
 ADMIN_COOKIE = "alg_admin"
@@ -469,6 +471,116 @@ async def admin_set_active(request: Request):
                                                       "p_active": bool(d.get("active"))}))
 
 
+# ---------------------------------------------------------------- test fayllari
+
+def decode_upload(d: dict) -> tuple[bytes, str, str]:
+    name = str(d.get("name") or "test-fayli")[:200]
+    try:
+        raw = base64.b64decode(str(d.get("data") or ""), validate=False)
+    except Exception:
+        raise db.DBError(400, "Fayl buzilgan yoki noto‘g‘ri yuborilgan")
+    if not raw:
+        raise db.DBError(400, "Fayl tanlanmagan")
+    if len(raw) > 3_300_000:
+        raise db.DBError(400, "Fayl hajmi 3 MB dan oshmasin")
+    try:
+        mime = test_import.detect_mime(name, str(d.get("mime") or ""))
+    except test_import.ImportErrorUz as exc:
+        raise db.DBError(400, str(exc))
+    return raw, name, mime
+
+
+def disposition(kind: str, name: str) -> str:
+    safe = re.sub(r'[^A-Za-z0-9._-]+', "_", name) or "fayl"
+    return f"{kind}; filename=\"{safe}\"; filename*=UTF-8''{quote(name)}"
+
+
+@api
+async def admin_parse_file(request: Request):
+    d = await read_json(request)
+    await db.rpc("admin_me", {"p_token": token_of(request)})
+    raw, name, mime = decode_upload(d)
+    try:
+        result = test_import.parse_file(raw, name, mime)
+    except test_import.ImportErrorUz as exc:
+        raise db.DBError(400, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[import] {name}: {type(exc).__name__}: {exc}")
+        raise db.DBError(400, "Faylni o‘qib bo‘lmadi. Boshqa formatda (masalan, .docx) saqlab qayta urinib ko‘ring.")
+    return ok(result)
+
+
+@api
+async def admin_import_questions(request: Request):
+    d = await read_json(request)
+    items = d.get("questions")
+    if not isinstance(items, list):
+        raise db.DBError(400, "Savollar yuborilmadi")
+    keys = ("question_text", "option_a", "option_b", "option_c", "option_d", "correct_option")
+    clean = [{k: (str(q.get(k)) if q.get(k) not in (None, "") else None) for k in keys}
+             for q in items if isinstance(q, dict)]
+    return ok(await db.rpc("admin_import_questions", {
+        "p_token": token_of(request), "p_test_id": request.path_params["tid"],
+        "p_questions": clean, "p_replace": bool(d.get("replace"))}))
+
+
+@api
+async def admin_attach_file(request: Request):
+    d = await read_json(request)
+    raw, name, mime = decode_upload(d)
+    visibility = str(d.get("visibility") or "after")
+    result = await db.rpc("admin_attach_test_file", {
+        "p_token": token_of(request), "p_test_id": request.path_params["tid"], "p_name": name,
+        "p_mime": mime, "p_b64": base64.b64encode(raw).decode(), "p_visibility": visibility})
+    return ok(result)
+
+
+@api
+async def admin_remove_file(request: Request):
+    await read_json(request)
+    return ok(await db.rpc("admin_remove_test_file", {"p_token": token_of(request),
+                                                      "p_test_id": request.path_params["tid"]}))
+
+
+@api
+async def admin_test_file(request: Request):
+    item = await db.rpc("admin_get_test_file", {"p_token": token_of(request), "p_test_id": request.path_params["tid"]})
+    return Response(base64.b64decode(item["data"]), media_type=item["mime"],
+                    headers={"Cache-Control": "private, no-store",
+                             "Content-Disposition": disposition("inline", item.get("name") or "fayl")})
+
+
+async def test_file_page(request: Request):
+    tid = request.path_params["tid"]
+    token = request.query_params.get("t") or None
+    data, notice = await site_data()
+    try:
+        item = await db.rpc("get_test_file", {"p_test_id": tid, "p_token": token})
+    except db.DBError as exc:
+        if exc.status == 403:
+            return html_page(pages.test_file_locked(data, tid, exc.message, notice=notice), notice, 403)
+        if exc.status == 404:
+            return html_page(pages.not_found(data, notice=notice), notice, 404)
+        return html_page(pages.not_found(data, notice=exc.message), exc.message, 503)
+    raw = base64.b64decode(item["data"])
+    cache = "private, no-store" if token else PUBLIC_CACHE
+    name = item.get("name") or "test-fayli"
+    if request.query_params.get("raw"):
+        kind = "inline" if item["mime"] == test_import.PDF_MIME and not request.query_params.get("download") else "attachment"
+        return Response(raw, media_type=item["mime"],
+                        headers={"Cache-Control": cache, "Content-Disposition": disposition(kind, name),
+                                 "X-Robots-Tag": "noindex"})
+    try:
+        paragraphs = test_import.plain_text(raw, item["mime"])
+    except Exception:  # noqa: BLE001
+        paragraphs = []
+    query = f"?t={quote(token)}&" if token else "?"
+    resp = html_page(pages.test_file_page(data, tid, item, paragraphs, query, notice=notice), notice)
+    resp.headers["Cache-Control"] = "private, no-store" if token or notice else PUBLIC_CACHE
+    resp.headers["X-Robots-Tag"] = "noindex"
+    return resp
+
+
 routes = [
     Route("/", home),
     Route("/courses", courses),
@@ -477,6 +589,7 @@ routes = [
     Route("/payment", payment_page),
     Route("/tests", tests_page),
     Route("/tests/{tid:int}", test_detail),
+    Route("/tests/{tid:int}/file", test_file_page),
     Route("/index.php", legacy_redirect),
     Route("/payment.php", legacy_redirect),
     Route("/tests.php", legacy_redirect),
@@ -505,6 +618,11 @@ routes = [
     Route("/api/admin/password", admin_password, methods=["POST"]),
     Route("/api/admin/admins", admin_create, methods=["POST"]),
     Route("/api/admin/admins/{rid:int}/active", admin_set_active, methods=["POST"]),
+    Route("/api/admin/tests/{tid:int}/parse", admin_parse_file, methods=["POST"]),
+    Route("/api/admin/tests/{tid:int}/import", admin_import_questions, methods=["POST"]),
+    Route("/api/admin/tests/{tid:int}/file", admin_attach_file, methods=["POST"]),
+    Route("/api/admin/tests/{tid:int}/file", admin_test_file, methods=["GET"]),
+    Route("/api/admin/tests/{tid:int}/file/remove", admin_remove_file, methods=["POST"]),
 ]
 
 app = Starlette(

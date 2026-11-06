@@ -311,6 +311,16 @@ p { margin: 0 0 1em; }
 }
 @keyframes score-flip { from { opacity: 0; transform: perspective(600px) rotateX(-80deg) translateY(20px); } to { opacity: 1; transform: none; } }
 
+.file-chip { display: inline-flex; align-items: center; gap: 12px; margin-top: 14px; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); text-decoration: none; max-width: 100%; }
+a.file-chip:hover { border-color: var(--red); }
+.file-chip .ico { color: var(--red); width: 24px; height: 24px; }
+.file-chip b { display: block; overflow-wrap: anywhere; }
+.file-chip small { color: var(--muted); }
+.file-chip.is-locked .ico { color: var(--muted); }
+.file-title { overflow-wrap: anywhere; font-size: clamp(24px, 3.4vw, 36px); margin-bottom: 18px; }
+.doc-view { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: clamp(18px, 4vw, 40px); font-size: 16.5px; line-height: 1.65; }
+.doc-view p { margin: 0 0 .55em; overflow-wrap: anywhere; }
+
 /* ------------------------------------------------ about + contact */
 .about-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 56px; align-items: start; }
 .about-copy h2 { margin-bottom: 18px; }
@@ -567,6 +577,39 @@ p { margin: 0 0 1em; }
 .q-item ol { margin: 6px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
 .q-item li.is-correct { color: var(--ok); font-weight: 600; }
 .loading { padding: 40px; text-align: center; color: var(--muted); }
+.file-panel { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 18px; margin-bottom: 16px; }
+.file-panel-main { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.file-panel-main > .ico { color: var(--red); width: 26px; height: 26px; }
+.file-panel-main b { display: block; overflow-wrap: anywhere; }
+.file-panel-main small { color: var(--muted); }
+.file-vis { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 13px; color: var(--muted); }
+.file-vis select { min-height: 32px; padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); }
+.file-panel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.imp-help { margin-top: 16px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 14px; background: var(--surface-2); }
+.imp-help summary, .imp-warn summary { cursor: pointer; font-weight: 600; }
+.imp-help pre { margin: 10px 0; padding: 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); font-size: 13px; white-space: pre-wrap; }
+.imp-help p { font-size: 13px; margin: 0; }
+.imp-summary { margin: 14px 0 8px; }
+.imp-warn { margin-bottom: 12px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--warn); }
+.imp-warn ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
+.imp-list { display: grid; gap: 10px; max-height: 52vh; overflow-y: auto; padding: 2px; }
+.imp-q { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; background: var(--surface); }
+.imp-q.is-missing { border-color: var(--red); background: color-mix(in srgb, var(--red-soft) 50%, var(--surface)); }
+.imp-q.is-off { opacity: .5; }
+.imp-q-head { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.imp-q-head input { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--red); flex: none; }
+.imp-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0 6px 28px; }
+.imp-opt { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; font-size: 14px; }
+.imp-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.imp-opt .option-key { width: 24px; height: 24px; font-size: 12px; }
+.imp-opt:has(input:checked) { border-color: var(--ok); background: var(--ok-soft); }
+.imp-opt:has(input:checked) .option-key { background: var(--ok); border-color: var(--ok); color: #fff; }
+.imp-opt:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+.imp-q small { margin-left: 28px; display: block; }
+.imp-miss { color: var(--red-text); font-weight: 600; }
+.imp-picked { color: var(--ok); font-weight: 600; }
+.imp-settings { margin-top: 14px; }
+@media (max-width: 640px) { .imp-opts { grid-template-columns: 1fr; margin-left: 0; } .imp-q small { margin-left: 0; } }
 
 @media (max-width: 960px) {
   .admin-shell { grid-template-columns: 1fr; }
