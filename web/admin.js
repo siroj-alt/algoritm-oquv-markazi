@@ -66,7 +66,8 @@
       back: '<path d="M15 5l-7 7 7 7"/>',
       plus: '<path d="M12 5v14M5 12h14"/>',
       upload: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
-      file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>'
+      file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+      clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'
     };
     return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths[name] + "</svg>";
   }
@@ -108,6 +109,22 @@
   var METHODS = { cash: "Naqd", card: "Karta", transfer: "O‘tkazma", other: "Boshqa" };
   var ATTEND = { present: "Keldi", absent: "Kelmadi", late: "Kechikdi", excused: "Sababli" };
   var FILE_VIS = { hidden: "o‘quvchilarga ko‘rinmaydi", after: "testdan keyin ochiladi", always: "doim ochiq" };
+  var TIME_MODE = { none: "Vaqt cheklanmagan", admin: "Vaqtni admin belgilaydi", student: "Vaqtni o‘quvchi o‘zi tanlaydi" };
+  function clock(sec) {
+    sec = Math.max(0, Math.round(Number(sec) || 0));
+    var hh = Math.floor(sec / 3600), mm = Math.floor((sec % 3600) / 60), ss = sec % 60;
+    return (hh ? hh + ":" + (mm < 10 ? "0" : "") + mm : mm) + ":" + (ss < 10 ? "0" : "") + ss;
+  }
+  function minutesText(m) {
+    m = Number(m) || 0;
+    if (m >= 60) return Math.floor(m / 60) + " soat" + (m % 60 ? " " + (m % 60) + " daq" : "");
+    return m + " daqiqa";
+  }
+  function timeCell(r) {
+    if (r.time_mode === "admin") return "<b>" + h(minutesText(r.time_limit_minutes)) + '</b><div class="cell-sub">admin belgilagan</div>';
+    if (r.time_mode === "student") return '<b>O‘quvchi tanlaydi</b><div class="cell-sub">1–300 daqiqa</div>';
+    return '<span class="cell-sub">Cheklanmagan</span>';
+  }
 
   /* ================================================= lookups */
   async function lookup(name) {
@@ -255,6 +272,7 @@
       columns: [
         { label: "Test", render: function (r) { return '<div class="cell-main">' + h(r.title) + '</div><div class="cell-sub">' + h(r.description || "") + (r.file_name ? "<br>Fayl: " + h(r.file_name) + " (" + h(FILE_VIS[r.file_visibility] || "") + ")" : "") + "</div>"; } },
         { label: "Savollar", cls: "num", render: function (r) { return h(r.questions_count); } },
+        { label: "Vaqt", render: timeCell },
         { label: "Ishlaganlar", cls: "num", render: function (r) { return h(r.results_count); } },
         { label: "Saytda", render: function (r) {
             if (!r.is_active) return badge("off", { off: "Yashirin" });
@@ -266,6 +284,10 @@
       fields: [
         { name: "title", label: "Test nomi", type: "text", required: true, span: 2 },
         { name: "description", label: "Qisqa tavsif", type: "textarea", span: 2 },
+        { name: "time_mode", label: "Test vaqti", type: "select", required: true, def: "none", options: function () { return enumOptions(TIME_MODE); },
+          help: "Savolli testga ham, fayl (PDF/Word) ko‘rinishidagi testga ham qo‘llanadi" },
+        { name: "time_limit_minutes", label: "Vaqt, daqiqada", type: "number", min: 1, maxNum: 600, placeholder: "Masalan, 30",
+          showIf: { field: "time_mode", values: ["admin"] }, help: "1 dan 600 daqiqagacha" },
         { name: "is_active", label: "Saytda ko‘rsatish", type: "bool", def: true, span: 2 }
       ],
       onChange: function () { dropLookup("tests"); }
@@ -288,6 +310,10 @@
         { label: "Ishtirokchi", render: function (r) { return '<div class="cell-main">' + h(r.full_name) + '</div><div class="cell-sub">' + h(r.phone) + "</div>"; } },
         { label: "Test", render: function (r) { return h(r.test_title || "—"); } },
         { label: "Natija", cls: "num", render: function (r) { return "<b>" + Math.round(r.percentage) + "%</b>" + '<div class="cell-sub">' + r.correct_answers + " / " + r.total_questions + "</div>"; } },
+        { label: "Vaqt", render: function (r) {
+            if (!r.time_limit_seconds) return '<span class="cell-sub">—</span>';
+            return "<b>" + clock(r.duration_seconds) + '</b><div class="cell-sub">' + clock(r.time_limit_seconds) + " dan</div>" +
+              (r.overtime ? badge("over", { over: "Vaqtdan oshgan" }) : ""); } },
         { label: "Sana", render: function (r) { return '<span class="cell-sub">' + fmtDate(r.created_at) + "</span>"; } }
       ]
     }
@@ -556,7 +582,7 @@
     var cls = "field" + (f.span === 2 ? " span-2" : "");
     var req = f.required ? " required" : "";
     var help = f.help ? '<small class="muted">' + h(f.help) + "</small>" : "";
-    var label = '<span>' + h(f.label) + (f.required ? "" : ' <em>(ixtiyoriy)</em>') + "</span>";
+    var label = '<span>' + h(f.label) + (f.required || f.showIf ? "" : ' <em>(ixtiyoriy)</em>') + "</span>";
     if (f.type === "bool") {
       return '<label class="check-field span-2"><input type="checkbox" name="' + f.name + '"' + (v === true || v === "true" ? " checked" : "") + "> " + h(f.label) + "</label>";
     }
@@ -580,7 +606,7 @@
     if (f.type === "month" && v) v = String(v).slice(0, 7);
     if (f.type === "date" && v) v = String(v).slice(0, 10);
     return '<label class="' + cls + '">' + label + '<input name="' + f.name + '" type="' + type + '" value="' + h(v) + '"' + req +
-      (f.min !== undefined ? ' min="' + f.min + '"' : "") + (f.max ? ' maxlength="' + f.max + '"' : "") + (f.placeholder ? ' placeholder="' + h(f.placeholder) + '"' : "") +
+      (f.min !== undefined ? ' min="' + f.min + '"' : "") + (f.maxNum ? ' max="' + f.maxNum + '"' : "") + (f.max ? ' maxlength="' + f.max + '"' : "") + (f.placeholder ? ' placeholder="' + h(f.placeholder) + '"' : "") +
       (type === "number" ? ' step="1" inputmode="numeric"' : "") + ">" + help + "</label>";
   }
 
@@ -592,6 +618,21 @@
       '</div><p class="form-status" aria-live="polite"></p></div><div class="modal-foot"><button class="btn btn-ghost" type="button" data-close>Bekor qilish</button><button class="btn btn-primary" type="submit">Saqlash</button></div></form>');
     var form = m.querySelector("form");
     var status = form.querySelector(".form-status");
+    function fieldShown(f) {
+      if (!f.showIf) return true;
+      var src = form.elements[f.showIf.field];
+      return !!src && f.showIf.values.indexOf(src.value) !== -1;
+    }
+    function applyShowIf() {
+      cfg.fields.forEach(function (f) {
+        if (!f.showIf || !form.elements[f.name]) return;
+        var el = form.elements[f.name], on = fieldShown(f);
+        el.closest(".field").hidden = !on;
+        el.required = on;
+      });
+    }
+    form.addEventListener("change", applyShowIf);
+    applyShowIf();
     form.querySelectorAll("[data-image-input]").forEach(function (input) {
       input.addEventListener("change", async function () {
         var file = input.files[0];
@@ -629,8 +670,9 @@
         var el = form.elements[f.name];
         if (!el) return;
         if (f.type === "bool") { data[f.name] = el.checked; return; }
+        if (!fieldShown(f)) { data[f.name] = null; return; }
         var val = el.value.trim();
-        if (f.required && val === "" && !bad) bad = el;
+        if ((f.required || f.showIf) && val === "" && !bad) bad = el;
         if (!el.checkValidity() && !bad) bad = el;
         if (f.type === "number") data[f.name] = val === "" ? null : Number(val);
         else if (f.type === "select" && /_id$/.test(f.name)) data[f.name] = val === "" ? null : Number(val);
@@ -643,7 +685,8 @@
       }
       if (bad) {
         var fl = cfg.fields.find(function (f) { return f.name === bad.name; });
-        status.textContent = "To‘ldiring: " + (fl ? fl.label : bad.name); status.className = "form-status is-error";
+        status.textContent = (bad.value.trim() !== "" && bad.type === "number" ? "Noto‘g‘ri qiymat: " : "To‘ldiring: ") + (fl ? fl.label : bad.name) +
+          (fl && fl.help && bad.type === "number" ? " (" + fl.help + ")" : ""); status.className = "form-status is-error";
         bad.focus(); return;
       }
       var btn = form.querySelector('button[type="submit"]');
@@ -749,7 +792,39 @@
       }).join("") + '</ol></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-edit="' + q.id + '">Tahrirlash</button> <button class="btn btn-danger btn-sm" data-del="' + q.id + '">O‘chirish</button></div></div>';
     }).join("") + "</div>"
       : '<div class="panel"><div class="table-empty">Bu testda hali savol yo‘q. «Fayl yuklash» orqali Word, PDF yoki matn faylni testga aylantiring yoki faylning o‘zini o‘quvchilarga ko‘rsating. Savollarni qo‘lda ham qo‘shishingiz mumkin.</div></div>';
-    body.innerHTML = filePanel + list;
+    var mode = (test && test.time_mode) || "none";
+    var timePanel = '<section class="panel file-panel time-panel"><div class="file-panel-main">' + icon("clock") + '<div><b>Test vaqti</b>' +
+      '<div class="time-panel-form"><select data-time-mode aria-label="Test vaqti">' + Object.keys(TIME_MODE).map(function (k) {
+        return '<option value="' + k + '"' + (mode === k ? " selected" : "") + ">" + h(TIME_MODE[k]) + "</option>"; }).join("") + "</select>" +
+      '<label class="time-min"' + (mode === "admin" ? "" : " hidden") + '><input type="number" min="1" max="600" step="1" inputmode="numeric" data-time-min value="' + h(test && test.time_limit_minutes || "") + '" placeholder="30" aria-label="Daqiqa"> daqiqa</label></div>' +
+      '<small data-time-hint></small></div></div><div class="file-panel-actions"><button class="btn btn-primary btn-sm" type="button" data-time-save>Saqlash</button></div></section>';
+    body.innerHTML = timePanel + filePanel + list;
+    var tMode = body.querySelector("[data-time-mode]"), tMin = body.querySelector("[data-time-min]"), tHint = body.querySelector("[data-time-hint]");
+    function timeHint() {
+      var kind = rows.length ? "Savollar" : "Fayl";
+      tMin.closest(".time-min").hidden = tMode.value !== "admin";
+      tHint.textContent = tMode.value === "none" ? "O‘quvchi testni vaqt chegarasisiz ishlaydi."
+        : tMode.value === "admin" ? kind + " «Boshlash» bosilgach ochiladi, belgilangan vaqt tugashi bilan " + (rows.length ? "javoblar avtomatik yuboriladi." : "fayl yopiladi.")
+        : "O‘quvchi boshlashdan oldin 10, 15, 20, 30, 45, 60, 90 daqiqa yoki o‘zi xohlagan vaqtni (300 daqiqagacha) tanlaydi.";
+    }
+    tMode.addEventListener("change", function () { timeHint(); if (tMode.value === "admin" && !tMin.value) tMin.focus(); });
+    timeHint();
+    body.querySelector("[data-time-save]").addEventListener("click", async function (e) {
+      var data = { time_mode: tMode.value, time_limit_minutes: null };
+      if (tMode.value === "admin") {
+        var n = Number(tMin.value);
+        if (!/^\d+$/.test(tMin.value.trim()) || n < 1 || n > 600) { toast("Vaqtni 1 dan 600 daqiqagacha kiriting", true); tMin.focus(); return; }
+        data.time_limit_minutes = n;
+      }
+      e.target.disabled = true;
+      try {
+        await api("POST", "/api/admin/save/tests", { id: testId, data: data });
+        test.time_mode = data.time_mode; test.time_limit_minutes = data.time_limit_minutes;
+        toast(data.time_mode === "admin" ? "Saqlandi: " + minutesText(data.time_limit_minutes) : "Saqlandi: " + TIME_MODE[data.time_mode].toLowerCase());
+        dropLookup("tests");
+      } catch (err) { toast(err.message, true); }
+      e.target.disabled = false;
+    });
 
     var vis = body.querySelector("[data-vis]");
     if (vis) vis.addEventListener("change", async function () {

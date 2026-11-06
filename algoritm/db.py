@@ -64,6 +64,18 @@ _PG_MESSAGES = {
 }
 
 
+_CONSTRAINT_MESSAGES = {
+    "online_tests_time_admin_check": "«Admin belgilaydi» rejimi uchun vaqtni (daqiqada) kiriting",
+    "online_tests_time_limit_check": "Test vaqti 1 daqiqadan 600 daqiqagacha bo‘lishi kerak",
+    "test_questions_correct_present": "To‘g‘ri javob sifatida bo‘sh variant tanlangan",
+    "test_questions_options_order": "D variantdan oldin C variantni to‘ldiring",
+    "courses_price_check": "Narx manfiy bo‘lishi mumkin emas",
+    "courses_name_check": "Kurs nomini kiriting (2–120 belgi)",
+    "students_phone_check": "Telefon raqami noto‘g‘ri",
+    "payments_amount_check": "To‘lov summasi 0 dan katta bo‘lishi kerak",
+}
+
+
 def configured() -> bool:
     return bool(URL and KEY)
 
@@ -111,6 +123,10 @@ async def rpc(fn: str, params: dict | None = None):
     if code.startswith("PT") and code[2:].isdigit():
         # Funksiyalarimiz tomonidan atayin berilgan, foydalanuvchiga ko‘rsatiladigan xato
         return_status = int(code[2:])
+        for constraint, friendly in _CONSTRAINT_MESSAGES.items():
+            if f"({constraint})" in message:
+                message = friendly
+                break
         raise DBError(return_status if 400 <= return_status < 600 else 400, message)
     if code == "P0001" and message:
         raise DBError(400, message)

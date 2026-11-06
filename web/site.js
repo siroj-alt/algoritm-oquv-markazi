@@ -326,60 +326,367 @@
   }
 
   /* ---------- tests */
-  document.querySelectorAll(".js-test").forEach(function (form) {
-    var questions = form.querySelectorAll(".question");
-    var progress = form.querySelector("[data-progress]");
-    var total = questions.length;
-    function answered() {
-      var n = 0;
-      questions.forEach(function (q) { if (q.querySelector("input:checked")) n++; });
-      return n;
-    }
-    form.addEventListener("change", function () {
-      if (progress) progress.textContent = answered() + " / " + total + " javob berildi";
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function clock(sec) {
+    sec = Math.max(0, Math.ceil(sec));
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return (h ? h + ":" + pad(m) : pad(m)) + ":" + pad(s);
+  }
+  function collectAnswers(form) {
+    var answers = {}, missing = [];
+    form.querySelectorAll(".question").forEach(function (q) {
+      var c = q.querySelector("input:checked");
+      if (c) answers[c.name.slice(2)] = c.value; else missing.push(q);
     });
+    return { answers: answers, missing: missing };
+  }
+  var FILE_SVG = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>';
+
+  function showResult(form, r) {
+    var box = form.parentElement.querySelector(".test-result");
+    var tid = form.getAttribute("data-test-id");
+    var pct = Math.round(Number(r.percentage));
+    var verdict = pct >= 85 ? "Ajoyib natija!" : pct >= 60 ? "Yaxshi natija." : "Mashq qilishda davom eting.";
+    box.innerHTML = '<h2></h2><div class="result-score"></div><p class="muted"></p><div class="actions actions-center"><a class="btn btn-primary" href="/register">Kursga yozilish</a><a class="btn btn-ghost" href="/tests">Boshqa testlar</a></div>';
+    box.querySelector("h2").textContent = verdict;
+    countUp(box.querySelector(".result-score"), pct);
+    box.querySelector("p").textContent = r.total + " ta savoldan " + r.correct + " tasiga to‘g‘ri javob berdingiz.";
+    if (r.limit_seconds) {
+      var t = document.createElement("p");
+      t.className = "result-time" + (r.overtime ? " is-over" : "");
+      t.textContent = "Sarflangan vaqt: " + clock(r.duration_seconds || 0) + " (ajratilgan vaqt: " + clock(r.limit_seconds) + ")" +
+        (r.overtime ? " — javoblar vaqt tugagandan keyin yuborildi" : "");
+      box.insertBefore(t, box.querySelector(".actions"));
+    }
+    if (r.file_token || r.file_open) {
+      var a = document.createElement("a");
+      a.className = "btn btn-ghost";
+      a.href = "/tests/" + tid + "/file" + (r.file_token ? "?t=" + encodeURIComponent(r.file_token) : "");
+      a.textContent = "Test faylini ko‘rish";
+      box.querySelector(".actions").appendChild(a);
+    }
+    form.hidden = true; box.hidden = false;
+    box.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function trackProgress(form, total) {
+    var progress = form.querySelector("[data-progress]");
+    function update() {
+      var n = form.querySelectorAll(".question input:checked").length;
+      if (progress) progress.textContent = n + " / " + total() + " javob berildi";
+    }
+    form.addEventListener("change", update);
+    return update;
+  }
+
+  /* Oddiy (vaqtsiz) test */
+  document.querySelectorAll(".js-test:not(.timed-form)").forEach(function (form) {
+    trackProgress(form, function () { return form.querySelectorAll(".question").length; });
     form.addEventListener("submit", async function (e) {
       e.preventDefault();
       var name = form.elements.full_name, phone = form.elements.phone;
       if (!name.checkValidity()) { setStatus(form, "Ism va familiyani kiriting", "error"); name.focus(); return; }
       if (!phoneOk(phone.value)) { setStatus(form, "Telefon raqamini to‘liq kiriting", "error"); phone.focus(); return; }
-      var missing = null;
-      var answers = {};
-      questions.forEach(function (q) {
-        var c = q.querySelector("input:checked");
-        if (c) answers[c.name.slice(2)] = c.value; else if (!missing) missing = q;
-      });
-      if (missing) {
+      var got = collectAnswers(form);
+      if (got.missing.length) {
         setStatus(form, "Barcha savollarga javob bering", "error");
-        missing.scrollIntoView({ behavior: "smooth", block: "center" });
+        got.missing[0].scrollIntoView({ behavior: "smooth", block: "center" });
         return;
       }
       var btn = form.querySelector('button[type="submit"]');
       btn.disabled = true; btn.textContent = "Tekshirilmoqda…";
       try {
         var r = await post("/api/tests/" + form.getAttribute("data-test-id") + "/submit",
-          { full_name: name.value, phone: phone.value, answers: answers });
-        var box = form.parentElement.querySelector(".test-result");
-        var pct = Math.round(Number(r.percentage));
-        var verdict = pct >= 85 ? "Ajoyib natija!" : pct >= 60 ? "Yaxshi natija." : "Mashq qilishda davom eting.";
-        box.innerHTML = '<h2></h2><div class="result-score"></div><p class="muted"></p><div class="actions actions-center"><a class="btn btn-primary" href="/register">Kursga yozilish</a><a class="btn btn-ghost" href="/tests">Boshqa testlar</a></div>';
-        box.querySelector("h2").textContent = verdict;
-        countUp(box.querySelector(".result-score"), pct);
-        box.querySelector("p").textContent = r.total + " ta savoldan " + r.correct + " tasiga to‘g‘ri javob berdingiz.";
-        var tid = form.getAttribute("data-test-id");
-        if (r.file_token || r.file_open) {
-          var a = document.createElement("a");
-          a.className = "btn btn-ghost";
-          a.href = "/tests/" + tid + "/file" + (r.file_token ? "?t=" + encodeURIComponent(r.file_token) : "");
-          a.textContent = "Test faylini ko‘rish";
-          box.querySelector(".actions").appendChild(a);
-        }
-        form.hidden = true; box.hidden = false;
-        box.scrollIntoView({ behavior: "smooth", block: "start" });
+          { full_name: name.value, phone: phone.value, answers: got.answers });
+        showResult(form, r);
       } catch (err) {
         setStatus(form, err.message, "error");
         btn.disabled = false; btn.textContent = "Testni yakunlash";
       }
     });
+  });
+
+  /* Vaqtli test: savolli yoki faqat fayldan iborat */
+  document.querySelectorAll("[data-timed]").forEach(function (box) {
+    var tid = box.getAttribute("data-test-id");
+    var kind = box.getAttribute("data-kind");
+    var mode = box.getAttribute("data-mode");
+    var startForm = box.querySelector(".js-timed-start");
+    var bar = box.querySelector("[data-timer]");
+    var leftEl = box.querySelector("[data-timer-left]");
+    var fill = box.querySelector("[data-timer-fill]");
+    var announce = box.querySelector("[data-timer-announce]");
+    var qForm = box.querySelector(".timed-form");
+    var doc = box.querySelector("[data-doc]");
+    var over = box.querySelector("[data-over]");
+    var chip = document.querySelector("[data-file-chip]");
+    var chipHTML = chip ? chip.outerHTML : "";
+    var key = "alg-timed-" + tid;
+    var state = null, timer = null, said = {}, finishing = false, confirmSkip = false;
+
+    function save() { try { sessionStorage.setItem(key, JSON.stringify(state)); } catch (e) {} }
+    function forget() { try { sessionStorage.removeItem(key); } catch (e) {} }
+    function remaining() { return state ? (state.deadline - Date.now()) / 1000 : 0; }
+
+    /* daqiqa tanlash */
+    if (startForm && mode === "student") {
+      var custom = startForm.querySelector(".minute-custom");
+      startForm.addEventListener("change", function (e) {
+        if (e.target.name !== "minutes") return;
+        custom.hidden = e.target.value !== "custom";
+        if (!custom.hidden) custom.querySelector("input").focus();
+      });
+    }
+    function chosenMinutes() {
+      if (mode !== "student") return null;
+      var c = startForm.querySelector('input[name="minutes"]:checked');
+      if (!c) return NaN;
+      if (c.value !== "custom") return Number(c.value);
+      var v = startForm.elements.custom_minutes.value.trim();
+      return /^\d+$/.test(v) ? Number(v) : NaN;
+    }
+
+    function setChip(token, note) {
+      if (!chip) return;
+      var name = chip.querySelector("b") ? chip.querySelector("b").textContent : "Test fayli";
+      var fresh;
+      if (token) {
+        fresh = document.createElement("a");
+        fresh.className = "file-chip is-open";
+        fresh.href = "/tests/" + tid + "/file?t=" + encodeURIComponent(token);
+        fresh.target = "_blank"; fresh.rel = "noopener";
+        fresh.innerHTML = FILE_SVG + "<span><b></b><small></small></span>";
+        fresh.querySelector("b").textContent = name;
+        fresh.querySelector("small").textContent = (chip.getAttribute("data-kind") || "Test") + " faylini ko‘rish · vaqt tugaguncha ochiq";
+      } else {
+        var holder = document.createElement("div");
+        holder.innerHTML = chipHTML;
+        fresh = holder.firstElementChild;
+        if (note) fresh.querySelector("small").textContent = note;
+      }
+      fresh.setAttribute("data-file-chip", "");
+      fresh.setAttribute("data-kind", chip.getAttribute("data-kind") || "");
+      chip.replaceWith(fresh);
+      chip = fresh;
+    }
+
+    function paint() {
+      var left = remaining();
+      leftEl.textContent = clock(left);
+      var ratio = state.limit ? Math.max(0, Math.min(1, left / state.limit)) : 0;
+      fill.style.transform = "scaleX(" + ratio.toFixed(4) + ")";
+      bar.classList.toggle("is-warn", left <= Math.max(60, Math.min(300, state.limit * 0.2)) && left > 60);
+      bar.classList.toggle("is-danger", left <= 60);
+      [[300, "5 daqiqa qoldi"], [60, "1 daqiqa qoldi"]].forEach(function (m) {
+        if (state.limit > m[0] * 2 && left <= m[0] && left > m[0] - 2 && !said[m[0]]) {
+          said[m[0]] = true;
+          announce.textContent = m[1];
+          toast(m[1]);
+        }
+      });
+      if (left <= 0) timeUp();
+    }
+    function run() {
+      clearInterval(timer);
+      bar.hidden = false;
+      bar.classList.remove("is-over");
+      paint();
+      timer = setInterval(paint, 250);
+    }
+    function stop() { clearInterval(timer); timer = null; }
+
+    /* --- savolli test */
+    function renderQuestions() {
+      var wrap = qForm.querySelector("[data-questions]");
+      wrap.textContent = "";
+      state.questions.forEach(function (q, i) {
+        var fs = document.createElement("fieldset");
+        fs.className = "question";
+        var lg = document.createElement("legend");
+        var num = document.createElement("span");
+        num.className = "q-num"; num.textContent = String(i + 1);
+        lg.appendChild(num); lg.appendChild(document.createTextNode(q.text || ""));
+        fs.appendChild(lg);
+        ["a", "b", "c", "d"].forEach(function (k) {
+          var text = String(q[k] || "").trim();
+          if (!text) return;
+          var lab = document.createElement("label");
+          lab.className = "option";
+          var inp = document.createElement("input");
+          inp.type = "radio"; inp.name = "q_" + q.id; inp.value = k.toUpperCase();
+          if (state.answers[q.id] === inp.value) inp.checked = true;
+          var keyEl = document.createElement("span");
+          keyEl.className = "option-key"; keyEl.textContent = k.toUpperCase();
+          var tx = document.createElement("span"); tx.textContent = text;
+          lab.appendChild(inp); lab.appendChild(keyEl); lab.appendChild(tx);
+          fs.appendChild(lab);
+        });
+        wrap.appendChild(fs);
+      });
+      var person = qForm.querySelector("[data-person]");
+      person.textContent = "";
+      var b = document.createElement("b"); b.textContent = state.name || "";
+      var sp = document.createElement("span"); sp.textContent = state.phone || "";
+      person.appendChild(b); person.appendChild(sp);
+    }
+    var updateProgress = qForm ? trackProgress(qForm, function () { return state ? state.questions.length : 0; }) : null;
+    if (qForm) {
+      qForm.addEventListener("change", function (e) {
+        if (!state || !e.target.name || e.target.name.indexOf("q_") !== 0) return;
+        state.answers[e.target.name.slice(2)] = e.target.value;
+        confirmSkip = false;
+        save();
+      });
+      qForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var got = collectAnswers(qForm);
+        if (got.missing.length && !confirmSkip) {
+          confirmSkip = true;
+          setStatus(qForm, got.missing.length + " ta savolga javob bermadingiz. Shunday yakunlash uchun tugmani yana bir marta bosing.", "error");
+          got.missing[0].scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+        finishQuestions(false);
+      });
+    }
+    async function finishQuestions(auto) {
+      if (finishing || !state) return;
+      finishing = true;
+      var btn = qForm.querySelector('button[type="submit"]');
+      btn.disabled = true; btn.textContent = "Tekshirilmoqda…";
+      if (auto) {
+        qForm.querySelectorAll(".question").forEach(function (f) { f.disabled = true; });
+        setStatus(qForm, "Vaqt tugadi. Javoblaringiz yuborilmoqda…", "");
+      }
+      try {
+        var r = await post("/api/tests/" + tid + "/submit", { attempt: state.attempt, answers: collectAnswers(qForm).answers });
+        stop(); forget(); state = null;
+        bar.hidden = true;
+        setChip(null, "Test yakunlandi — fayl yopildi");
+        showResult(qForm, r);
+      } catch (err) {
+        finishing = false;
+        if (/yakunlangan|topilmadi/.test(err.message)) {
+          // Urinish boshqa qurilmada davom ettirilgan yoki yakunlangan — boshlash oynasiga qaytamiz
+          stop(); forget(); state = null; bar.hidden = true;
+          qForm.hidden = true;
+          setChip(null);
+          startForm.hidden = false;
+          setStatus(startForm, err.message, "error");
+          startForm.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+        setStatus(qForm, err.message, "error");
+        btn.disabled = false; btn.textContent = auto ? "Javoblarni qayta yuborish" : "Testni yakunlash";
+      }
+    }
+
+    /* --- faqat fayl */
+    async function loadDoc() {
+      doc.hidden = false;
+      doc.innerHTML = '<p class="muted doc-loading">Fayl yuklanmoqda…</p>';
+      try {
+        var res = await fetch("/tests/" + tid + "/file?t=" + encodeURIComponent(state.file_token) + "&fragment=1",
+          { credentials: "same-origin", headers: { "X-Requested-With": "fetch" } });
+        if (!res.ok) throw new Error(res.status === 403 ? "Fayl yopildi" : "Faylni yuklab bo‘lmadi");
+        var html = await res.text();
+        if (state) doc.innerHTML = html;
+      } catch (err) {
+        doc.innerHTML = '<p class="form-status is-error"></p>';
+        doc.querySelector("p").textContent = err.message + ". Sahifani yangilab ko‘ring.";
+      }
+    }
+
+    function timeUp() {
+      stop();
+      if (kind === "questions") {
+        leftEl.textContent = "00:00";
+        bar.classList.add("is-over");
+        setChip(null, "Vaqt tugadi — fayl yopildi");
+        finishQuestions(true);
+        return;
+      }
+      finishing = true;
+      forget(); state = null;
+      doc.innerHTML = ""; doc.hidden = true;
+      bar.hidden = true;
+      over.hidden = false;
+      over.scrollIntoView({ behavior: "smooth", block: "center" });
+      announce.textContent = "Vaqt tugadi. Fayl yopildi";
+    }
+
+    function begin(focus) {
+      said = {}; finishing = false; confirmSkip = false;
+      startForm.hidden = true;
+      if (over) over.hidden = true;
+      if (kind === "questions") {
+        renderQuestions();
+        qForm.hidden = false;
+        setStatus(qForm, "", "");
+        var btn = qForm.querySelector('button[type="submit"]');
+        btn.disabled = false; btn.textContent = "Testni yakunlash";
+        updateProgress();
+        if (state.file_token) setChip(state.file_token);
+      } else {
+        loadDoc();
+      }
+      run();
+      if (focus && remaining() > 0) bar.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    if (startForm) {
+      startForm.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        var body = {};
+        if (kind === "questions") {
+          var name = startForm.elements.full_name, phone = startForm.elements.phone;
+          if (!name.checkValidity() || name.value.trim().length < 3) { setStatus(startForm, "Ism va familiyani kiriting", "error"); name.focus(); return; }
+          if (!phoneOk(phone.value)) { setStatus(startForm, "Telefon raqamini to‘liq kiriting", "error"); phone.focus(); return; }
+          body.full_name = name.value.trim(); body.phone = formatPhone(phone.value);
+        }
+        var minutes = chosenMinutes();
+        if (mode === "student") {
+          if (!(minutes >= 1 && minutes <= 300)) {
+            setStatus(startForm, "Vaqtni 1 daqiqadan 300 daqiqagacha tanlang", "error");
+            var ci = startForm.elements.custom_minutes; if (ci && !ci.closest("[hidden]")) ci.focus();
+            return;
+          }
+          body.minutes = minutes;
+        }
+        var btn = startForm.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        setStatus(startForm, "Test tayyorlanmoqda…", "");
+        try {
+          var r = await post("/api/tests/" + tid + "/start", body);
+          state = {
+            attempt: r.attempt || null, limit: r.limit_seconds,
+            deadline: Date.now() + Number(r.remaining_seconds) * 1000,
+            file_token: r.file_token || null, questions: r.questions || [], answers: {},
+            name: body.full_name || "", phone: body.phone || ""
+          };
+          save();
+          setStatus(startForm, "", "");
+          begin(true);
+        } catch (err) {
+          setStatus(startForm, err.message, "error");
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+    var restart = box.querySelector("[data-restart]");
+    if (restart) restart.addEventListener("click", function () {
+      over.hidden = true; startForm.hidden = false; finishing = false;
+      startForm.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    /* sahifa yangilansa — davom ettirish */
+    try { state = JSON.parse(sessionStorage.getItem(key) || "null"); } catch (e) { state = null; }
+    if (state && state.deadline && state.limit && (kind === "file" ? state.file_token : state.attempt)) {
+      if (kind === "file" && remaining() <= 0) { forget(); state = null; }
+      else begin(false);
+    } else {
+      state = null;
+    }
   });
 })();

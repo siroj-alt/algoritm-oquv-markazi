@@ -188,6 +188,13 @@ async def test_detail(request: Request):
         if exc.status == 404:
             return html_page(pages.not_found(data, notice=notice), notice, 404)
         return html_page(pages.not_found(data, notice=exc.message), exc.message, 503)
+    if test.get("time_mode") in ("admin", "student"):
+        f = test.get("file") or {}
+        if int(test.get("question_count") or 0) > 0:
+            return html_page(pages.timed_test_page(data, test, notice=notice, base_url=base_url(request)), notice)
+        if f.get("visibility") == "always":
+            return html_page(pages.timed_file_page(data, test, notice=notice, base_url=base_url(request)), notice)
+        return html_page(pages.not_found(data, notice=notice), notice, 404)
     if not test.get("questions"):
         f = test.get("file") or {}
         if f.get("visibility") == "always":
@@ -324,13 +331,32 @@ async def api_payment_request(request: Request):
 async def api_submit_test(request: Request):
     d = await read_json(request)
     answers = d.get("answers")
-    if not isinstance(answers, dict) or not answers:
+    attempt = str(d.get("attempt") or "") or None
+    if not isinstance(answers, dict) or (not answers and not attempt):
         raise db.DBError(400, "Savollarga javob bering")
     result = await db.rpc("submit_test", {
         "p_test_id": request.path_params["tid"],
         "p_full_name": str(d.get("full_name") or ""),
         "p_phone": str(d.get("phone") or ""),
         "p_answers": {str(k): str(v)[:1] for k, v in answers.items()},
+        "p_attempt": attempt,
+    })
+    return ok(result)
+
+
+@api
+async def api_start_test(request: Request):
+    d = await read_json(request)
+    minutes = d.get("minutes")
+    try:
+        minutes = int(minutes) if minutes not in (None, "") else None
+    except (TypeError, ValueError):
+        raise db.DBError(400, "Vaqtni daqiqada kiriting")
+    result = await db.rpc("start_test", {
+        "p_test_id": request.path_params["tid"],
+        "p_full_name": str(d.get("full_name") or "") or None,
+        "p_phone": str(d.get("phone") or "") or None,
+        "p_minutes": minutes,
     })
     return ok(result)
 
@@ -583,6 +609,9 @@ async def render_test_file(request: Request, tid, token, data, notice, test: dic
     except Exception:  # noqa: BLE001
         paragraphs = []
     query = f"?t={quote(token)}&" if token else "?"
+    if request.query_params.get("fragment"):
+        return HTMLResponse(pages.file_fragment(tid, item, paragraphs, query),
+                            headers={"Cache-Control": "private, no-store", "X-Robots-Tag": "noindex"})
     resp = html_page(pages.test_file_page(data, tid, item, paragraphs, query, test=test, notice=notice), notice)
     resp.headers["Cache-Control"] = "private, no-store" if token or notice else PUBLIC_CACHE
     if not test:
@@ -613,6 +642,7 @@ routes = [
     Route("/api/register", api_register, methods=["POST"]),
     Route("/api/payment-requests", api_payment_request, methods=["POST"]),
     Route("/api/tests/{tid:int}/submit", api_submit_test, methods=["POST"]),
+    Route("/api/tests/{tid:int}/start", api_start_test, methods=["POST"]),
     Route("/api/admin/login", admin_login, methods=["POST"]),
     Route("/api/admin/logout", admin_logout, methods=["POST"]),
     Route("/api/admin/me", admin_me),

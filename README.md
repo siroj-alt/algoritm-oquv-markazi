@@ -61,3 +61,16 @@ oxiridagi «Javoblar: 1-B, 2-A…» kaliti orqali aniqlanadi. Fayl testga birikt
 o‘quvchilarga «testdan keyin» yoki «doim» ko‘rsatilishi mumkin.
 
 `/api/health` — baza ulanishini tekshirish uchun.
+
+## Test vaqti
+
+Har bir testga vaqt belgilash mumkin: admin panel → «Onlayn testlar» → test formasida yoki «Savollar» sahifasidagi «Test vaqti» panelida.
+
+- **Vaqt cheklanmagan** — test avvalgidek ishlanadi.
+- **Vaqtni admin belgilaydi** — admin 1–600 daqiqa kiritadi, hamma o‘quvchiga bir xil vaqt beriladi.
+- **Vaqtni o‘quvchi o‘zi tanlaydi** — o‘quvchi boshlashdan oldin 10–90 daqiqalik tayyor variantlardan birini yoki 300 daqiqagacha o‘z vaqtini tanlaydi.
+
+Vaqt ikkala ko‘rinishga ham ishlaydi:
+
+- **Savolli test** — savollar «Testni boshlash» bosilgach ochiladi, vaqt tugashi bilan belgilangan javoblar avtomatik yuboriladi. Boshlanish vaqti serverda saqlanadi (`private.test_attempts`), shuning uchun sahifani yangilash yoki boshqa qurilmadan shu telefon raqami bilan kirish vaqtni qayta boshlamaydi. Kechikib yuborilgan javoblar natijalarda «Vaqtdan oshgan» deb belgilanadi.
+- **Fayl (PDF/Word) ko‘rinishidagi test** — fayl faqat «Boshlash»dan keyin ochiladi va vaqt tugagach yopiladi; faylga kirish ruxsati serverda vaqt tugashi bilan (1 daqiqa zaxira bilan) bekor bo‘ladi.

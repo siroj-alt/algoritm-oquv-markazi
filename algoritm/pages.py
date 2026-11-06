@@ -108,6 +108,8 @@ _ICONS = {
     "download": '<path d="M12 4v12M7 11l5 5 5-5"/><path d="M4 20h16"/>',
     "lock": '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     "list": '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
+    "play": '<path d="M8 5.5v13l10.5-6.5z"/>',
+    "timer": '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 1.5M10 2.5h4M18.5 6l1.5-1.5"/>',
 }
 
 
@@ -580,11 +582,149 @@ def test_page(data: dict, test: dict, **kw) -> str:
                   body=body, settings=s, active="tests", path=f"/tests/{test.get('id')}", **kw)
 
 
+TIME_PRESETS = (10, 15, 20, 30, 45, 60, 90)
+
+
+def timed_start_card(test: dict, kind: str) -> str:
+    mode = test.get("time_mode")
+    if mode == "admin":
+        lead = f"Testni ishlash uchun sizga <b>{e(minutes_text(test.get('time_limit_minutes')))}</b> beriladi."
+        picker = ""
+    else:
+        lead = "Testni necha daqiqada ishlashni o‘zingiz tanlang."
+        chips = "".join(
+            f'<label class="chip"><input type="radio" name="minutes" value="{m}"{" checked" if m == 30 else ""}>'
+            f'<span>{m} daq</span></label>' for m in TIME_PRESETS)
+        picker = f"""<fieldset class="minute-pick">
+      <legend>Ishlash vaqti</legend>
+      <div class="chips">{chips}<label class="chip"><input type="radio" name="minutes" value="custom"><span>Boshqa</span></label></div>
+      <label class="field minute-custom" hidden><span>Daqiqa (1 dan 300 gacha)</span>
+        <input name="custom_minutes" type="number" min="1" max="300" step="1" inputmode="numeric" placeholder="Masalan, 25"></label>
+    </fieldset>"""
+    person = ""
+    rules = ["Vaqt «Testni boshlash» tugmasini bosgan zahotingiz hisoblana boshlaydi va to‘xtamaydi."]
+    if kind == "questions":
+        person = """<div class="field-row">
+      <label class="field"><span>Ism va familiya</span><input name="full_name" required minlength="3" maxlength="120" autocomplete="name"></label>
+      <label class="field"><span>Telefon raqami</span><input name="phone" type="tel" required inputmode="tel" autocomplete="tel" data-phone placeholder="+998 90 123 45 67"></label>
+    </div>"""
+        rules += ["Vaqt tugaganda belgilagan javoblaringiz avtomatik yuboriladi.",
+                  "Sahifa yangilansa yoki yopilsa, shu telefon raqami bilan qaytib kirib davom ettirasiz."]
+        if (test.get("file") or {}).get("visibility") == "always":
+            rules.append("Test fayli faqat vaqt davomida ochiq turadi.")
+    else:
+        rules += ["Test fayli vaqt davomida ochiq turadi, vaqt tugagach yopiladi.",
+                  "Javoblaringizni daftarga yozib boring."]
+    rule_html = "".join(f"<li>{icon('check')}<span>{r}</span></li>" for r in rules)
+    return f"""<form class="form-card timed-start js-timed-start" novalidate>
+    <div class="timed-start-head">
+      <span class="timed-badge">{icon("timer")}</span>
+      <div><h2>Vaqtli test</h2><p>{lead}</p></div>
+    </div>
+    {picker}
+    {person}
+    <ul class="timed-rules">{rule_html}</ul>
+    <button class="btn btn-primary btn-lg btn-block" type="submit">{icon("play")}Testni boshlash</button>
+    <p class="form-status" aria-live="polite"></p>
+  </form>"""
+
+
+def timer_bar() -> str:
+    return f"""<div class="timer-bar" data-timer hidden>
+    <span class="timer-ico">{icon("timer")}</span>
+    <span class="timer-main"><span class="timer-label">Qolgan vaqt</span><b class="timer-left" data-timer-left role="timer">00:00</b></span>
+    <span class="timer-track" aria-hidden="true"><i data-timer-fill></i></span>
+  </div>
+  <p class="sr-only" aria-live="assertive" data-timer-announce></p>"""
+
+
+def _timed_head(test: dict, meta: str) -> str:
+    return f"""<section class="page-head"><div class="wrap narrow">
+  <a class="back-link" href="/tests">{icon("back")}Barcha testlar</a>
+  <h1>{e(test.get("title"))}</h1>
+  {f'<p class="lead">{e(test["description"])}</p>' if test.get("description") else ''}
+  <p class="test-meta">{meta}</p>
+  {test_file_block(test) if test.get("question_count") else ''}
+</div></section>"""
+
+
+NOSCRIPT = ('<noscript><p class="notice-inline">Vaqtli testni ishlash uchun brauzeringizda JavaScript '
+            'yoqilgan bo‘lishi kerak.</p></noscript>')
+
+
+def timed_test_page(data: dict, test: dict, **kw) -> str:
+    count = int(test.get("question_count") or 0)
+    tt = time_text(test)
+    meta = f'<span>{icon("list")}{count} ta savol</span><span>{icon("clock")}{e(tt)}</span>'
+    attrs = (f'data-timed data-test-id="{e(test.get("id"))}" data-kind="questions" data-mode="{e(test.get("time_mode"))}" '
+             f'data-count="{count}" data-file-kind="{file_kind((test.get("file") or {}).get("mime"))}"')
+    body = f"""{_timed_head(test, meta)}
+<section class="section section-tight"><div class="wrap narrow timed" {attrs}>
+  {NOSCRIPT}
+  {timed_start_card(test, "questions")}
+  {timer_bar()}
+  <form class="js-test timed-form" data-test-id="{e(test.get('id'))}" hidden novalidate>
+    <div class="timed-person" data-person></div>
+    <div data-questions></div>
+    <div class="test-submit">
+      <span class="test-progress" data-progress>0 / {count} javob berildi</span>
+      <button class="btn btn-primary btn-lg" type="submit">Testni yakunlash</button>
+    </div>
+    <p class="form-status" aria-live="polite"></p>
+  </form>
+  <div class="test-result" hidden></div>
+</div></section>"""
+    return layout(title=test.get("title") or "Test", description=(test.get("description") or "Vaqtli onlayn test")[:160],
+                  body=body, settings=data["settings"], active="tests", path=f"/tests/{test.get('id')}", **kw)
+
+
+def timed_file_page(data: dict, test: dict, **kw) -> str:
+    f = test.get("file") or {}
+    tt = time_text(test)
+    meta = f'<span>{icon("file")}{file_kind(f.get("mime"))} fayl</span><span>{icon("clock")}{e(tt)}</span>'
+    attrs = f'data-timed data-test-id="{e(test.get("id"))}" data-kind="file" data-mode="{e(test.get("time_mode"))}"'
+    body = f"""{_timed_head(test, meta)}
+<section class="section section-tight"><div class="wrap narrow timed" {attrs}>
+  {NOSCRIPT}
+  {timed_start_card(test, "file")}
+  {timer_bar()}
+  <div class="timed-doc" data-doc hidden></div>
+  <div class="form-card timed-over" data-over hidden>
+    <span class="timed-badge is-over">{icon("lock")}</span>
+    <h2>Vaqt tugadi</h2>
+    <p class="muted">Test fayli yopildi. Javoblaringizni o‘qituvchingizga topshiring yoki testni qaytadan boshlang.</p>
+    <div class="actions"><button class="btn btn-primary" type="button" data-restart>Qaytadan boshlash</button>
+      <a class="btn btn-ghost" href="/tests">Boshqa testlar</a></div>
+  </div>
+</div></section>"""
+    return layout(title=test.get("title") or "Test", description=(test.get("description") or f.get("name") or "Vaqtli test")[:160],
+                  body=body, settings=data["settings"], active="tests", path=f"/tests/{test.get('id')}", **kw)
+
+
+def minutes_text(m) -> str:
+    m = int(m or 0)
+    if m >= 60:
+        h, rest = divmod(m, 60)
+        return f"{h} soat" + (f" {rest} daqiqa" if rest else "")
+    return f"{m} daqiqa"
+
+
+def time_text(t: dict) -> str:
+    mode = t.get("time_mode")
+    if mode == "admin" and t.get("time_limit_minutes"):
+        return minutes_text(t["time_limit_minutes"])
+    if mode == "student":
+        return "vaqtni o‘zingiz tanlaysiz"
+    return ""
+
+
 def test_label(t: dict) -> str:
     if t.get("file_only"):
-        return f"{file_kind(t.get('file_mime'))} fayl"
-    label = f"{e(t.get('questions'))} ta savol"
-    return label + (", fayl bilan" if t.get("file_mime") else "")
+        label = f"{file_kind(t.get('file_mime'))} fayl"
+    else:
+        label = f"{e(t.get('questions'))} ta savol" + (", fayl bilan" if t.get("file_mime") else "")
+    tt = time_text(t)
+    return label + (f'<span class="time-tag">{icon("clock")}{e(tt)}</span>' if tt else "")
 
 
 def file_kind(mime: str) -> str:
@@ -596,6 +736,11 @@ def test_file_block(test: dict) -> str:
     if not f:
         return ""
     name = e(f.get("name") or "Test fayli")
+    timed = test.get("time_mode") in ("admin", "student")
+    if timed and f.get("visibility") == "always":
+        # Vaqtli testda fayl faqat test boshlangach, vaqt tugaguncha ochiladi
+        return (f'<div class="file-chip is-locked" data-file-chip data-kind="{file_kind(f.get("mime"))}">{icon("lock")}'
+                f'<span><b>{name}</b><small>Fayl test boshlangach ochiladi</small></span></div>')
     if f.get("visibility") == "always":
         return (f'<a class="file-chip" href="/tests/{e(test.get("id"))}/file">{icon("file")}'
                 f'<span><b>{name}</b><small>{file_kind(f.get("mime"))} faylini ko‘rish</small></span></a>')
@@ -603,19 +748,32 @@ def test_file_block(test: dict) -> str:
             f'<small>Test fayli testni yakunlaganingizdan keyin ochiladi</small></span></div>')
 
 
-def test_file_page(data: dict, tid, item: dict, paragraphs: list, query: str, test: dict | None = None, **kw) -> str:
-    """Test faylini o‘qish sahifasi. `test` berilsa — faqat fayldan iborat testning o‘z sahifasi."""
-    s = data["settings"]
-    name = item.get("name") or "Test fayli"
+def _doc_parts(tid, item: dict, paragraphs: list, query: str) -> tuple[str, str]:
     is_pdf = item.get("mime") == "application/pdf"
     body_text = "".join(f"<p>{e(p)}</p>" for p in paragraphs[:3000]) or \
         '<p class="muted">Fayl matnini ko‘rsatib bo‘lmadi. Faylni yuklab olib oching.</p>'
-    base = f"/tests/{e(tid)}/file{query}"
+    base = f"/tests/{e(tid)}/file{e(query)}"
     pdf_btn = (f'<a class="btn btn-primary" href="{base}raw=1" target="_blank" rel="noopener">'
                f'{icon("file")}PDF ko‘rinishida ochish</a>') if is_pdf else ""
     actions = f"""<div class="actions">{pdf_btn}
     <a class="btn btn-ghost" href="{base}raw=1&amp;download=1">{icon("download")}Faylni yuklab olish</a>
   </div>"""
+    return actions, body_text
+
+
+def file_fragment(tid, item: dict, paragraphs: list, query: str) -> str:
+    """Vaqtli test boshlangach sahifaga qo‘yiladigan hujjat bo‘lagi."""
+    actions, body_text = _doc_parts(tid, item, paragraphs, query)
+    name = item.get("name") or "Test fayli"
+    return (f'<div class="doc-head"><p class="file-meta">{icon("file")}<span>{e(name)}</span></p>{actions}</div>'
+            f'<article class="doc-view">{body_text}</article>')
+
+
+def test_file_page(data: dict, tid, item: dict, paragraphs: list, query: str, test: dict | None = None, **kw) -> str:
+    """Test faylini o‘qish sahifasi. `test` berilsa — faqat fayldan iborat testning o‘z sahifasi."""
+    s = data["settings"]
+    name = item.get("name") or "Test fayli"
+    actions, body_text = _doc_parts(tid, item, paragraphs, query)
     if test:
         head = f"""<a class="back-link" href="/tests">{icon("back")}Barcha testlar</a>
   <h1>{e(test.get("title"))}</h1>
