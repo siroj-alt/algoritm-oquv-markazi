@@ -306,18 +306,51 @@
     },
     test_results: {
       title: "Test natijalari", one: "natija", noAdd: true, noEdit: true,
+      sorts: [
+        { id: "new", label: "Sana: eng yangisi birinchi", cmp: function (a, b) { return when(b) - when(a); } },
+        { id: "old", label: "Sana: eng eskisi birinchi", cmp: function (a, b) { return when(a) - when(b); } },
+        { id: "best", label: "Reyting: eng yuqori natija", rank: true, cmp: function (a, b) { return scoreCmp(a, b) || when(a) - when(b); } },
+        { id: "worst", label: "Reyting: eng past natija", cmp: function (a, b) { return -scoreCmp(a, b) || when(a) - when(b); } }
+      ],
+      groupFilter: { key: "test_id", all: "Barcha testlar", text: function (r) { return r.test_title || "Nomsiz test"; } },
+      liveSummary: function (list) {
+        if (!list.length) return "";
+        var sum = 0, best = 0;
+        list.forEach(function (r) { var p = Number(r.percentage) || 0; sum += p; if (p > best) best = p; });
+        return list.length + " ta natija · o‘rtacha " + Math.round(sum / list.length) + "% · eng yuqori " + Math.round(best) + "%";
+      },
       columns: [
+        { label: "O‘rin", rankCol: true, cls: "num rank-cell", render: function (r) { return rankBadge(r._rank); } },
         { label: "Ishtirokchi", render: function (r) { return '<div class="cell-main">' + h(r.full_name) + '</div><div class="cell-sub">' + h(r.phone) + "</div>"; } },
         { label: "Test", render: function (r) { return h(r.test_title || "—"); } },
-        { label: "Natija", cls: "num", render: function (r) { return "<b>" + Math.round(r.percentage) + "%</b>" + '<div class="cell-sub">' + r.correct_answers + " / " + r.total_questions + "</div>"; } },
+        { label: "Natija", cls: "num", sortPair: ["best", "worst"], render: function (r) { return "<b>" + Math.round(r.percentage) + "%</b>" + '<div class="cell-sub">' + r.correct_answers + " / " + r.total_questions + "</div>"; } },
         { label: "Vaqt", render: function (r) {
             if (!r.time_limit_seconds) return '<span class="cell-sub">—</span>';
             return "<b>" + clock(r.duration_seconds) + '</b><div class="cell-sub">' + clock(r.time_limit_seconds) + " dan</div>" +
               (r.overtime ? badge("over", { over: "Vaqtdan oshgan" }) : ""); } },
-        { label: "Sana", render: function (r) { return '<span class="cell-sub">' + fmtDate(r.created_at) + "</span>"; } }
+        { label: "Sana", sortPair: ["new", "old"], render: function (r) { return '<span class="cell-sub">' + fmtDate(r.created_at) + "</span>"; } }
       ]
     }
   };
+
+  /* ---- natijalarni saralash yordamchilari */
+  function when(r) { var t = Date.parse(r.created_at); return isNaN(t) ? 0 : t; }
+  // Yuqori foiz → ko‘proq to‘g‘ri javob → tezroq ishlagan (vaqtli testda) — shu tartibda yaxshiroq
+  function scoreCmp(a, b) {
+    var d = (Number(b.percentage) || 0) - (Number(a.percentage) || 0);
+    if (d) return d;
+    d = (Number(b.correct_answers) || 0) - (Number(a.correct_answers) || 0);
+    if (d) return d;
+    var da = a.duration_seconds, db = b.duration_seconds;
+    if (da != null && db != null && da !== db) return da - db;
+    return 0;
+  }
+  function rankBadge(n) {
+    if (!n) return "";
+    return '<span class="rank' + (n <= 3 ? " rank-" + n : "") + '">' + n + "</span>";
+  }
+  function savedPref(key, fallback) { try { return localStorage.getItem("alg-admin-" + key) || fallback; } catch (e) { return fallback; } }
+  function savePref(key, v) { try { localStorage.setItem("alg-admin-" + key, v); } catch (e) { /* storage unavailable */ } }
 
   var NAV = [
     { id: "dashboard", label: "Bosh panel" },
@@ -496,34 +529,100 @@
     if (entity === "students") state.lookups.students = rows;
     var filterSel = cfg.statusFilter ? '<select data-status-filter aria-label="Holat bo‘yicha"><option value="">Barcha holatlar</option>' +
       Object.keys(cfg.statusFilter).map(function (k) { return '<option value="' + k + '">' + h(cfg.statusFilter[k]) + "</option>"; }).join("") + "</select>" : "";
-    body.innerHTML = '<div class="toolbar"><input type="search" data-search placeholder="Qidirish…" aria-label="Qidirish">' + filterSel +
+    var groupSel = "";
+    if (cfg.groupFilter) {
+      var groups = {}, counts = {}, names = {};
+      rows.forEach(function (r) {
+        var k = r[cfg.groupFilter.key]; if (k == null) return;
+        if (!groups[k]) { groups[k] = cfg.groupFilter.text(r); names[groups[k]] = (names[groups[k]] || 0) + 1; }
+        counts[k] = (counts[k] || 0) + 1;
+      });
+      groupSel = '<select data-group-filter aria-label="Test bo‘yicha"><option value="">' + h(cfg.groupFilter.all) + "</option>" +
+        Object.keys(groups).sort(function (a, b) { return groups[a].localeCompare(groups[b], "uz") || b - a; })
+          .map(function (k) {
+            // bir xil nomli testlarni raqami bilan ajratamiz
+            var label = groups[k] + (names[groups[k]] > 1 ? " · №" + k : "") + " (" + counts[k] + ")";
+            return '<option value="' + h(k) + '">' + h(label) + "</option>";
+          }).join("") + "</select>";
+    }
+    var sortSel = cfg.sorts ? '<label class="sort-pick"><span>Saralash</span><select data-sort aria-label="Saralash tartibi">' +
+      cfg.sorts.map(function (o) { return '<option value="' + o.id + '">' + h(o.label) + "</option>"; }).join("") + "</select></label>" : "";
+    body.innerHTML = '<div class="toolbar"><input type="search" data-search placeholder="Qidirish…" aria-label="Qidirish">' + filterSel + groupSel + sortSel +
       (cfg.summary ? '<span class="muted" style="align-self:center">' + cfg.summary(rows) + "</span>" : "") + "</div>" +
-      '<div class="table-wrap"><table class="table"><thead><tr>' + cfg.columns.map(function (c) { return "<th>" + h(c.label) + "</th>"; }).join("") +
+      (cfg.liveSummary ? '<p class="list-summary muted" data-live-summary aria-live="polite"></p>' : "") +
+      '<div class="table-wrap"><table class="table"><thead><tr>' + cfg.columns.map(function (c, i) {
+        if (!c.sortPair) return '<th data-col="' + i + '">' + h(c.label) + "</th>";
+        return '<th data-col="' + i + '"><button class="th-sort" type="button" data-sort-pair="' + c.sortPair.join(",") + '">' + h(c.label) +
+          '<span class="th-arrow" aria-hidden="true"></span></button></th>';
+      }).join("") +
       '<th></th></tr></thead><tbody></tbody></table></div>';
     var tbody = body.querySelector("tbody");
     var search = body.querySelector("[data-search]");
     var statusSel = body.querySelector("[data-status-filter]");
+    var groupEl = body.querySelector("[data-group-filter]");
+    var sortEl = body.querySelector("[data-sort]");
+    var liveEl = body.querySelector("[data-live-summary]");
+    if (sortEl) {
+      var pref = savedPref("sort-" + entity, cfg.sorts[0].id);
+      sortEl.value = cfg.sorts.some(function (o) { return o.id === pref; }) ? pref : cfg.sorts[0].id;
+    }
+    function currentSort() {
+      if (!cfg.sorts) return null;
+      return cfg.sorts.find(function (o) { return o.id === sortEl.value; }) || cfg.sorts[0];
+    }
     function draw() {
       var q = search.value.trim().toLowerCase();
       var st = statusSel ? statusSel.value : "";
+      var grp = groupEl ? groupEl.value : "";
       var list = rows.filter(function (r) {
         if (st && r.status !== st) return false;
-        if (!q) return true;
-        return JSON.stringify(r).toLowerCase().indexOf(q) !== -1;
+        if (grp && String(r[cfg.groupFilter.key]) !== grp) return false;
+        return true;
       });
+      var sort = currentSort();
+      if (sort) {
+        list = list.slice().sort(sort.cmp);
+        // o‘rin qidiruvdan oldin hisoblanadi; teng natijalar bir xil o‘rinni oladi: 1, 2, 2, 4 …
+        list.forEach(function (r, i) {
+          r._rank = !sort.rank ? 0 : i > 0 && scoreCmp(list[i - 1], r) === 0 ? list[i - 1]._rank : i + 1;
+        });
+        body.querySelectorAll("[data-sort-pair]").forEach(function (b) {
+          var pair = b.getAttribute("data-sort-pair").split(","), th = b.closest("th"), on = pair.indexOf(sort.id);
+          th.setAttribute("aria-sort", on === -1 ? "none" : (sort.id === "best" || sort.id === "new") ? "descending" : "ascending");
+          b.classList.toggle("is-active", on !== -1);
+          b.querySelector(".th-arrow").textContent = on === -1 ? "↕" : on === 0 ? "↓" : "↑";
+        });
+      }
+      if (q) list = list.filter(function (r) { return JSON.stringify(r).toLowerCase().indexOf(q) !== -1; });
+      var showRank = !!(sort && sort.rank);
+      cfg.columns.forEach(function (c, i) { if (c.rankCol) body.querySelector('th[data-col="' + i + '"]').hidden = !showRank; });
+      var cols = cfg.columns.filter(function (c) { return !c.rankCol || showRank; });
+      if (liveEl) liveEl.textContent = cfg.liveSummary(list) +
+        (showRank && groupEl && !grp && list.length ? " · har bir test bo‘yicha alohida reyting uchun testni tanlang" : "");
       if (!list.length) {
-        tbody.innerHTML = '<tr><td colspan="' + (cfg.columns.length + 1) + '"><div class="table-empty">' + (rows.length ? "Hech narsa topilmadi" : "Hozircha yozuvlar yo‘q") + "</div></td></tr>";
+        tbody.innerHTML = '<tr><td colspan="' + (cols.length + 1) + '"><div class="table-empty">' + (rows.length ? "Hech narsa topilmadi" : "Hozircha yozuvlar yo‘q") + "</div></td></tr>";
         return;
       }
       tbody.innerHTML = list.slice(0, 500).map(function (r) {
         var acts = (cfg.actions ? cfg.actions(r) : "") +
           (cfg.noEdit ? "" : '<button class="btn btn-ghost btn-sm" data-act="edit" data-id="' + r.id + '">Tahrirlash</button>') +
           '<button class="btn btn-danger btn-sm" data-act="delete" data-id="' + r.id + '" aria-label="O‘chirish">O‘chirish</button>';
-        return "<tr>" + cfg.columns.map(function (c) { return '<td class="' + (c.cls || "") + '" data-label="' + h(c.label) + '">' + c.render(r) + "</td>"; }).join("") + '<td class="row-actions">' + acts + "</td></tr>";
+        var top = showRank && r._rank && r._rank <= 3 ? ' class="is-top"' : "";
+        return "<tr" + top + ">" + cols.map(function (c) { return '<td class="' + (c.cls || "") + '" data-label="' + h(c.label) + '">' + c.render(r) + "</td>"; }).join("") + '<td class="row-actions">' + acts + "</td></tr>";
       }).join("");
     }
     search.addEventListener("input", draw);
     if (statusSel) statusSel.addEventListener("change", draw);
+    if (groupEl) groupEl.addEventListener("change", draw);
+    if (sortEl) sortEl.addEventListener("change", function () { savePref("sort-" + entity, sortEl.value); draw(); });
+    body.querySelectorAll("[data-sort-pair]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var pair = b.getAttribute("data-sort-pair").split(",");
+        sortEl.value = sortEl.value === pair[0] ? pair[1] : pair[0];
+        savePref("sort-" + entity, sortEl.value);
+        draw();
+      });
+    });
     draw();
     tbody.addEventListener("click", function (e) {
       var b = e.target.closest("[data-act]");

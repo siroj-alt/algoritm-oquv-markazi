@@ -609,6 +609,20 @@ a.file-chip:hover { border-color: var(--red); }
 .table .cell-main { font-weight: 600; }
 .table .cell-sub { color: var(--muted); font-size: 13px; }
 .table-empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+.sort-pick { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.toolbar input, .toolbar select { font-size: 15px; color: var(--ink); }
+.sort-pick select { font-weight: 500; }
+.list-summary { margin: -4px 0 12px; font-size: 13.5px; }
+.th-sort { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+.th-sort:hover, .th-sort.is-active { color: var(--ink); }
+.th-sort:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+.th-arrow { font-size: 12px; opacity: .55; }
+.th-sort.is-active .th-arrow { opacity: 1; color: var(--red); }
+.rank { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); font-weight: 700; font-size: 13px; }
+.rank-1 { background: #f7c948; border-color: #e2b02c; color: #3d2c00; }
+.rank-2 { background: #d9dde4; border-color: #c2c8d1; color: #2b313b; }
+.rank-3 { background: #e4a46c; border-color: #cf8a4f; color: #3b1f06; }
+.table tr.is-top td { background: color-mix(in srgb, var(--red) 4%, transparent); }
 .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); white-space: nowrap; }
 .badge-new, .badge-pending { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
 .badge-ok, .badge-enrolled, .badge-approved, .badge-present { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
@@ -717,6 +731,7 @@ a.file-chip:hover { border-color: var(--red); }
   .table td { border: 0; padding: 6px 16px; }
   .table td[data-label]::before { content: attr(data-label); display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
   .table td.num { white-space: normal; }
+  .table td.rank-cell::before { display: none; }
   .table .row-actions { text-align: left; white-space: normal; padding-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
   .table .row-actions button { margin: 0; }
   .table .table-empty { border: 1px dashed var(--line-strong); border-radius: var(--radius); }
