@@ -342,6 +342,53 @@
   }
   var FILE_SVG = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>';
 
+  /* Test yakunidagi reyting: eng yaxshi ishlaganlar va o‘quvchining o‘rni */
+  function leaderboard(lb, r) {
+    var el = function (tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+    var wrap = el("section", "lb");
+    wrap.setAttribute("aria-label", "Test reytingi");
+    var head = el("div", "lb-head");
+    head.appendChild(el("h3", null, "Reyting"));
+    head.appendChild(el("span", "lb-count", lb.participants + " ta ishtirokchi"));
+    wrap.appendChild(head);
+    var rank = lb.your_rank;
+    if (rank) {
+      var you = el("p", "lb-you" + (rank <= 3 ? " is-top" : ""));
+      you.appendChild(document.createTextNode(rank === 1 ? "Tabriklaymiz! Sizning o‘rningiz: " : "Sizning o‘rningiz: "));
+      you.appendChild(el("b", null, rank + "-o‘rin"));
+      wrap.appendChild(you);
+      if (!lb.this_attempt_counts) {
+        wrap.appendChild(el("p", "lb-note", r.overtime
+          ? "Bu urinish vaqt tugagandan keyin yuborilgani uchun reytingga kirmadi — o‘rningiz oldingi eng yaxshi natijangiz bo‘yicha."
+          : "Reytingda har bir o‘quvchining eng yaxshi natijasi hisobga olinadi."));
+      }
+    } else if (r.overtime) {
+      wrap.appendChild(el("p", "lb-note", "Javoblar vaqt tugagandan keyin yuborilgani uchun natija reytingga kirmadi."));
+    }
+    var timed = (lb.top || []).concat(lb.you ? [lb.you] : []).some(function (x) { return x.duration_seconds != null; });
+    var list = el("ol", "lb-list");
+    function row(x, i) {
+      var li = el("li", "lb-row" + (x.is_you ? " is-you" : ""));
+      li.style.setProperty("--i", i);
+      li.appendChild(el("span", "rank" + (x.rank <= 3 ? " rank-" + x.rank : ""), String(x.rank)));
+      var name = el("span", "lb-name");
+      name.appendChild(el("span", "lb-n", x.name));
+      if (x.is_you) name.appendChild(el("em", "lb-me", "Siz"));
+      li.appendChild(name);
+      li.appendChild(el("span", "lb-score", Math.round(Number(x.percentage)) + "%"));
+      if (timed) li.appendChild(el("span", "lb-time", x.duration_seconds != null ? clock(x.duration_seconds) : "—"));
+      li.title = x.correct + " / " + x.total + " to‘g‘ri javob";
+      return li;
+    }
+    (lb.top || []).forEach(function (x, i) { list.appendChild(row(x, i)); });
+    if (lb.you) {
+      var gap = el("li", "lb-gap", "···"); gap.setAttribute("aria-hidden", "true"); list.appendChild(gap);
+      list.appendChild(row(lb.you, (lb.top || []).length + 1));
+    }
+    if (list.children.length) wrap.appendChild(list);
+    return wrap;
+  }
+
   function showResult(form, r) {
     var box = form.parentElement.querySelector(".test-result");
     var tid = form.getAttribute("data-test-id");
@@ -358,6 +405,7 @@
         (r.overtime ? " — javoblar vaqt tugagandan keyin yuborildi" : "");
       box.insertBefore(t, box.querySelector(".actions"));
     }
+    if (r.leaderboard) box.insertBefore(leaderboard(r.leaderboard, r), box.querySelector(".actions"));
     if (r.file_token || r.file_open) {
       var a = document.createElement("a");
       a.className = "btn btn-ghost";

@@ -381,6 +381,33 @@ a.file-chip:hover { border-color: var(--red); }
 .timed-over { text-align: center; }
 .timed-over .actions { justify-content: center; }
 .result-time { font-weight: 600; margin: 4px 0 0; }
+/* reyting (test yakunida) */
+.lb { max-width: 560px; margin: 28px auto 0; text-align: left; padding: 22px; border-radius: var(--radius); background: var(--paper); border: 1px solid var(--line); }
+.lb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.lb-head h3 { margin: 0; font-size: 20px; }
+.lb-count { color: var(--muted); font-size: 14px; font-weight: 500; }
+.lb-you { margin: 0 0 4px; font-size: 17px; }
+.lb-you b { color: var(--red-text); }
+.lb-you.is-top b { color: var(--red); }
+.lb-note { margin: 0 0 4px; color: var(--muted); font-size: 13.5px; }
+.lb-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; }
+.lb-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.lb-row .rank { justify-self: start; }
+.lb-row.is-you { border-color: var(--red); background: var(--red-soft); box-shadow: 0 6px 18px -10px var(--red); }
+.lb-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; }
+.lb-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-me { flex: none; font-style: normal; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--red); color: #fff; }
+.lb-score { font-weight: 700; min-width: 48px; text-align: right; }
+.lb-time { color: var(--muted); font-size: 14px; min-width: 52px; text-align: right; }
+.lb-gap { text-align: center; color: var(--muted); letter-spacing: 4px; line-height: 1; padding: 2px 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .test-result:not([hidden]) .lb-row { animation: lb-in .5s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(.5s + var(--i, 0) * 60ms); }
+}
+@keyframes lb-in { from { opacity: 0; transform: translateY(10px); } }
+@media (max-width: 560px) {
+  .lb { padding: 16px 12px; margin-top: 22px; }
+  .lb-row { gap: 8px; grid-template-columns: 30px minmax(0, 1fr) auto auto; }
+}
 .result-time.is-over { color: var(--warn); }
 @media (max-width: 560px) {
   .timer-bar { top: 66px; padding: 10px 14px; gap: 10px; }
